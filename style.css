@@ -8,4 +8,5 @@
 .editor-previews[data-count="1"] img{height:200px}#order article{margin:8px 0;padding:10px}#order h3{font-size:1rem;margin:0}#order .photo-info p{margin:4px 0}#order button{padding:8px;min-height:44px}
 #tutorial{line-height:1.6}#tutorial summary{font-weight:600}#tutorial ol{padding-left:24px}#tutorial li{margin:6px 0}#tutorial p{overflow-wrap:anywhere}
 .actions>*{min-width:0;max-width:100%}.actions label{width:100%}input[type=file]{width:100%;min-width:0}
-#order .editor-previews img{height:112px}#order .editor-previews[data-count="1"] img{height:200px}
+#order .editor-previews img{height:auto;aspect-ratio:4/3}#order .editor-previews[data-count="1"] img{height:auto;max-height:260px;aspect-ratio:4/3}
+.work-days{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.work-days label{flex:1;min-width:180px}.work-days select{display:block;font:inherit;min-height:46px;width:100%;max-width:100%;color:#19332f;background:white;border-radius:8px}.card img,.group-photos img{height:auto;aspect-ratio:4/3;object-fit:contain;background:#eef1eb}input[readonly]{background:#edf1e8;color:#19332f}#video{aspect-ratio:4/3;object-fit:contain}
