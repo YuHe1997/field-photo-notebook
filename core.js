@@ -17,6 +17,10 @@ export function compactCoordinates(l){if(!l||!Number.isFinite(l.latitude)||!Numb
 export function compactDirection(h){const label=directionLabel(h?.degrees);if(!label)return '方向未取得';const notes=[];if(h.accuracy<0||(typeof h.quality==='string'&&h.quality.includes('不可靠')))notes.push('讀值不可靠');if((h.freshnessAtAcquisitionCompleted??h.freshness)==='過期')notes.push('讀值過期');notes.push('需驗證');return `${label}(${notes.join('，')})`;}
 export function compactPhotoLines(p,index){return [`${index+1}.照片${p?.photoNumber??'?'}`,p?photoMinute(p):'時間未取得',compactCoordinates(p?.location),compactDirection(p?.heading)];}
 
+export function zoomCapability(cap,reported){const z=cap?.zoom;if(!z||!Number.isFinite(z.min)||!Number.isFinite(z.max)||z.min<=0||z.max<=z.min||!Number.isFinite(reported)||reported<z.min||reported>z.max)return null;return {min:z.min,max:z.max,step:Number.isFinite(z.step)&&z.step>0?z.step:.1};}
+export function snapZoom(value,range){if(!Number.isFinite(value))throw Error('縮放倍率無效');const n=Math.max(range.min,Math.min(range.max,value)),snapped=range.min+Math.round((n-range.min)/range.step)*range.step;return Number(Math.max(range.min,Math.min(range.max,snapped)).toFixed(6));}
+export function cropRect(width,height,factor){if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0||!Number.isFinite(factor)||factor<1)throw Error('相機影格或數位倍率尚未就緒');const sw=width/factor,sh=height/factor;return {sx:(width-sw)/2,sy:(height-sh)/2,sw,sh,width:Math.max(1,Math.floor(sw)),height:Math.max(1,Math.floor(sh))};}
+
 // Half-open sectors: [337.5, 22.5) is north; labels describe opposite → reference.
 export function directionLabel(degrees){
   if(!Number.isFinite(degrees))return null;

@@ -1,7 +1,7 @@
 import * as db from './db.js';
-import {compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,previewRotation} from './core.js';
+import {compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,previewRotation,zoomCapability,snapZoom,cropRect} from './core.js';
 const $=id=>document.getElementById(id),say=s=>$('status').textContent=s;
-let photos=[],assets=[],groups=[],selected=new Set(),multi=false,edit=null,editBaseline=null,urls={gallery:[],groups:[],order:[]},stream=null,watch=null,gps=null,heading=null,sensorState='尚未啟用',active='camera',starting=false,busy=false,rotating=false,cameraSession=0;
+let photos=[],assets=[],groups=[],selected=new Set(),multi=false,edit=null,editBaseline=null,urls={gallery:[],groups:[],order:[]},stream=null,watch=null,gps=null,heading=null,sensorState='尚未啟用',active='camera',starting=false,busy=false,rotating=false,cameraSession=0,zoomState=null,directionStatus='尚未啟用',gpsStatus='尚未啟用';
 const text=(tag,s)=>{const e=document.createElement(tag);e.textContent=s;return e;};
 async function run(fn){try{await fn();}catch(e){say('操作／儲存失敗：'+e.message+'。資料未宣稱成功，請重試或先備份。');}}
 const DAY_KEY='field-photo-notebook-work-days';
@@ -22,40 +22,46 @@ function editorValue(){return edit?JSON.stringify({photoIds:edit.photoIds,engine
 function editorDirty(){return !!edit&&editorValue()!==editBaseline;}
 function canDiscardEditor(){return !editorDirty()||confirm('記事尚未儲存，確定放棄這次編輯？');}
 window.addEventListener('beforeunload',e=>{if(editorDirty()||pending.length||busy||rotating){e.preventDefault();e.returnValue='';}});
-function stop(){cameraSession++;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;$('shutter').disabled=true;if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;gps=null;heading=null;window.removeEventListener('deviceorientation',onOrientation);window.removeEventListener('deviceorientationabsolute',onOrientation);sensorState='感測已停止';sensors();}
-function sensors(){ $('sensor').textContent=`${sensorState}；GPS：${gps?`${gps.latitude.toFixed(6)}, ${gps.longitude.toFixed(6)} ±${gps.accuracyM}m；${Date.now()-gps.readingAt<=10000?'新鮮':'過期'}；${gps.accuracyM>20?'約略':'精度非保證'}`:'未取得'}；裝置羅盤：${heading?`裝置參考推估：${directionLabel(heading.degrees)}；${heading.degrees.toFixed(1)}°；${heading.quality}；${Date.now()-heading.readingAt<=2000?'新鮮':'過期'}（僅供參考）`:'未取得絕對方位'}；鏡頭朝向：無法可靠判定` ;}
+function stop(){cameraSession++;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;gps=null;heading=null;zoomState?.cancelFrame?.();zoomState=null;directionStatus=gpsStatus='已停止';window.removeEventListener('deviceorientation',onOrientation);window.removeEventListener('deviceorientationabsolute',onOrientation);sensorState='感測已停止';zoomUI();sensors();}
+function sensors(){ $('sensor').textContent=`${sensorState}；GPS 狀態：${gpsStatus}；方向狀態：${directionStatus}；GPS：${gps?`${gps.latitude.toFixed(6)}, ${gps.longitude.toFixed(6)} ±${gps.accuracyM}m；${Date.now()-gps.readingAt<=10000?'新鮮':'過期'}；${gps.accuracyM>20?'約略':'精度非保證'}`:'未取得'}；裝置羅盤：${heading?`裝置參考推估：${directionLabel(heading.degrees)}；${heading.degrees.toFixed(1)}°；${heading.quality}；${Date.now()-heading.readingAt<=2000?'新鮮':'過期'}（僅供參考）`:'未取得絕對方位'}；鏡頭朝向：無法可靠判定` ;}
 setInterval(sensors,1000);
 function tab(name){if(name==='editor'&&!edit)return;if(name!=='camera')stop();active=name;for(const n of ['camera','photos','groups'])$(n).hidden=n!==name;$('editor').hidden=name!=='editor'||!edit;$('editingTab').hidden=$('appendToEditor').hidden=!edit;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.tab===name));if(name==='editor'){renderOrder();$('editor').scrollIntoView({block:'start'});const h=$('editor').querySelector('h2');h.tabIndex=-1;h.focus({preventScroll:true});}}
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
+function currentCamera(session){return session===cameraSession&&active==='camera'&&!document.hidden;}
+function beginDirection(session){const E=window.DeviceOrientationEvent;if(!E){directionStatus='不支援方向感測';sensors();return;}directionStatus='等待方向授權';let permission;try{permission=typeof E.requestPermission==='function'?E.requestPermission(true):Promise.resolve('granted');}catch(e){permission=Promise.reject(e);}Promise.resolve(permission).then(result=>{if(!currentCamera(session))return;if(result!=='granted'){directionStatus='方向權限被拒絕';sensors();return;}window.addEventListener('deviceorientation',onOrientation);window.addEventListener('deviceorientationabsolute',onOrientation);directionStatus='已啟用，等待絕對方位讀值';sensors();},e=>{if(currentCamera(session)){directionStatus='方向授權失敗：'+e.message;sensors();}});}
+function previewDimensions(){const v=$('video');if(stream&&v.videoWidth&&v.videoHeight)$('cameraPreview').style.setProperty('--camera-aspect',v.videoWidth/v.videoHeight);}
+$('video').addEventListener('loadedmetadata',previewDimensions);$('video').addEventListener('resize',previewDimensions);
+function zoomUI(){const z=zoomState,disabled=!z||z.applying||busy;for(const id of ['zoom','zoomIn','zoomOut'])$(id).disabled=disabled;$('zoom').disabled=!z||busy;$('start').disabled=starting||busy;$('shutter').disabled=!stream||starting||busy||!!z?.applying||z?.factor===null||z?.frameReady===false;if(!z){$('zoomValue').textContent='開啟相機後可縮放';$('zoomNote').textContent='支援時使用鏡頭 API；否則使用數位裁切，畫質會降低。';$('video').style.transform='none';return;}$('zoom').min=z.range.min;$('zoom').max=z.range.max;$('zoom').step=z.range.step;$('zoom').value=z.requested??z.factor??z.range.min;$('zoomValue').textContent=z.applying?'正在套用縮放…':z.factor===null?'倍率未確認，請重新開啟':`${Number(z.factor.toFixed(2))}×`;$('zoomNote').textContent=z.mode==='camera-api'?'鏡頭 API 縮放（不保證光學）；變焦拍攝保存目前影格 JPEG，解析度依手機。':'數位裁切（非光學）：預覽與新照片一同裁切，放大越多解析度越低。';$('video').style.transform=z.mode==='browser-digital-crop'?`scale(${z.factor})`:'none';if(z.factor===null)for(const id of ['zoom','zoomIn','zoomOut'])$(id).disabled=true;}
+function initZoom(track,session,settings){let cap=null;try{cap=track.getCapabilities?.();}catch{}const range=zoomCapability(cap,settings.zoom);zoomState={track,session,mode:range?'camera-api':'browser-digital-crop',range:range??{min:1,max:4,step:.1},factor:range?settings.zoom:1,applying:false,requested:null,frameReady:true};previewDimensions();zoomUI();}
+function nextZoomFrame(z){const v=$('video');return new Promise((resolve,reject)=>{let frame,tick,timer,finished=false;const done=error=>{if(finished)return;finished=true;clearTimeout(timer);if(frame!==undefined)v.cancelVideoFrameCallback?.(frame);if(tick!==undefined)cancelAnimationFrame(tick);z.cancelFrame=null;error?reject(error):resolve();};z.cancelFrame=()=>done(Error('相機已停止'));timer=setTimeout(()=>done(Error('縮放後影格未更新，請重試或重新開啟')),4000);if(v.requestVideoFrameCallback)frame=v.requestVideoFrameCallback(()=>done());else{const before=v.currentTime;const check=()=>{if(v.currentTime>before)done();else tick=requestAnimationFrame(check);};tick=requestAnimationFrame(check);}});}
+async function requestZoom(value){const z=zoomState;if(!z||busy||z.factor===null)return;z.requested=snapZoom(value,z.range);if(z.applying)return;z.applying=true;zoomUI();try{while(z.requested!==null&&zoomState===z&&currentCamera(z.session)){const next=z.requested;z.requested=null;if(z.mode==='camera-api'){await z.track.applyConstraints({advanced:[{zoom:next}]});if(zoomState!==z||!currentCamera(z.session))return;const actual=z.track.getSettings().zoom;if(!Number.isFinite(actual)||actual<z.range.min||actual>z.range.max){z.factor=null;throw Error('手機未回報可確認的倍率');}z.factor=actual;z.frameReady=false;await nextZoomFrame(z);if(zoomState!==z||!currentCamera(z.session))return;z.frameReady=true;if(Math.abs(actual-next)>Math.max(1e-6,z.range.step/2))throw Error('手機未套用要求倍率，顯示仍以實際讀值為準');}else z.factor=next;}}catch(e){if(zoomState===z&&currentCamera(z.session)){if(z.mode==='camera-api'){try{const actual=z.track.getSettings().zoom;const valid=Number.isFinite(actual)&&actual>=z.range.min&&actual<=z.range.max;if(!valid||actual!==z.factor)z.frameReady=false;z.factor=valid?actual:null;}catch{z.factor=null;z.frameReady=false;}}z.requested=null;say('縮放未成功：'+e.message+'；未宣稱已放大，可重新開啟相機。');}}finally{z.applying=false;if(zoomState===z)zoomUI();}}
+$('zoom').oninput=()=>run(()=>requestZoom(Number($('zoom').value)));$('zoomIn').onclick=()=>run(()=>requestZoom((zoomState?.factor??1)+Math.max(zoomState?.range.step??.1,.5)));$('zoomOut').onclick=()=>run(()=>requestZoom((zoomState?.factor??1)-Math.max(zoomState?.range.step??.1,.5)));
 $('start').onclick=()=>run(async()=>{
-  if(starting)return;
+  if(starting||busy||active!=='camera')return;
   starting=true;
-  let acquired=null;
+  let acquired=null,session;
   try{
-    stop();const session=cameraSession;
+    stop();session=cameraSession;zoomUI();
     if(!isSecureContext)throw Error('相機需要 HTTPS 或 localhost');
+    // iOS needs requestPermission directly inside this click, before any await.
+    beginDirection(session);
     acquired=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},aspectRatio:{ideal:4/3},width:{ideal:1600},height:{ideal:1200}},audio:false});
-    if(session!==cameraSession||active!=='camera'||document.hidden){acquired.getTracks().forEach(t=>t.stop());return;}
+    if(!currentCamera(session)){acquired.getTracks().forEach(t=>t.stop());return;}
     stream=acquired;$('video').srcObject=acquired;
     await $('video').play();
-    // play() can resolve after stop, navigation or backgrounding.
-    if(session!==cameraSession||active!=='camera'||document.hidden){acquired.getTracks().forEach(t=>t.stop());return;}
-    $('shutter').disabled=false;
-    sensorState='實際鏡頭：'+(acquired.getVideoTracks()[0].getSettings().facingMode||'未知');
+    if(!currentCamera(session)){acquired.getTracks().forEach(t=>t.stop());return;}
+    const track=acquired.getVideoTracks()[0],settings=track.getSettings();
+    sensorState='實際鏡頭：'+(settings.facingMode||'未知');initZoom(track,session,settings);
+    gpsStatus=navigator.geolocation?'等待定位授權／讀值':'不支援定位';
     if(navigator.geolocation)watch=navigator.geolocation.watchPosition(p=>{
-      if(session!==cameraSession)return;
-      const c=p.coords;
-      if(Number.isFinite(c.latitude)&&Number.isFinite(c.longitude)&&Number.isFinite(c.accuracy))gps={latitude:c.latitude,longitude:c.longitude,accuracyM:c.accuracy,readingAt:p.timestamp,receivedAt:Date.now(),source:'browser-geolocation',precision:c.accuracy>20?'約略':'非保證'};
-    },e=>{if(session!==cameraSession)return;gps=null;sensorState='定位未取得：'+e.message;},{enableHighAccuracy:true,maximumAge:0,timeout:15000});
-  }catch(e){
-    acquired?.getTracks().forEach(t=>t.stop());
-    stop();
-    throw e;
-  }finally{starting=false;}
+      if(!currentCamera(session))return;const c=p.coords;
+      if(Number.isFinite(c.latitude)&&Number.isFinite(c.longitude)&&Number.isFinite(c.accuracy)){gps={latitude:c.latitude,longitude:c.longitude,accuracyM:c.accuracy,readingAt:p.timestamp,receivedAt:Date.now(),source:'browser-geolocation',precision:c.accuracy>20?'約略':'非保證'};gpsStatus='已取得定位';}sensors();
+    },e=>{if(!currentCamera(session))return;gps=null;gpsStatus='定位未取得：'+e.message;sensors();},{enableHighAccuracy:true,maximumAge:0,timeout:15000});sensors();
+  }catch(e){acquired?.getTracks().forEach(t=>t.stop());if(session===cameraSession){stop();throw e;}}
+  finally{starting=false;zoomUI();}
 });
 $('stop').onclick=stop;document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});window.addEventListener('pagehide',stop);
-function onOrientation(e){let degrees,source;if(Number.isFinite(e.webkitCompassHeading)&&e.webkitCompassHeading>=0){degrees=e.webkitCompassHeading;source='webkitCompassHeading';}else if(e.absolute===true&&Number.isFinite(e.alpha)){degrees=(360-e.alpha)%360;source='absolute-alpha-device-reference';}else{sensorState='相對旋轉不是絕對羅盤';return;}heading={degrees,source,readingAt:Date.now(),timestampMeaning:'瀏覽器收到讀值時間（非硬體時間）',accuracy:Number.isFinite(e.webkitCompassAccuracy)?e.webkitCompassAccuracy:null,quality:Number.isFinite(e.webkitCompassAccuracy)&&e.webkitCompassAccuracy<0?'平台回報不可靠':'精度未保證／僅供參考',northReference:'平台絕對參考；真北／磁北未保證',alpha:e.alpha,beta:e.beta,gamma:e.gamma,screenAngle:screen.orientation?.angle??window.orientation??null,cameraBearing:null,cameraTransformEvidence:'未驗證裝置／螢幕／鏡頭轉換'};}
-$('orientation').onclick=()=>{if(active!=='camera'){say('請先切換拍攝');return;}const session=cameraSession;const E=window.DeviceOrientationEvent; if(!E){say('不支援方向感測');return;}const permission=typeof E.requestPermission==='function'?E.requestPermission():Promise.resolve('granted');run(async()=>{if(await permission!=='granted')throw Error('方向權限被拒絕');if(session!==cameraSession||active!=='camera'||document.hidden)return;window.addEventListener('deviceorientation',onOrientation);window.addEventListener('deviceorientationabsolute',onOrientation);sensorState='方向監聽已啟用';});};
+function onOrientation(e){let degrees,source;if(Number.isFinite(e.webkitCompassHeading)&&e.webkitCompassHeading>=0){degrees=e.webkitCompassHeading;source='webkitCompassHeading';}else if(e.absolute===true&&Number.isFinite(e.alpha)){degrees=(360-e.alpha)%360;source='absolute-alpha-device-reference';}else{if(!heading)directionStatus='相對旋轉不是絕對羅盤';return;}directionStatus='已取得裝置參考（需驗證）';heading={degrees,source,readingAt:Date.now(),timestampMeaning:'瀏覽器收到讀值時間（非硬體時間）',accuracy:Number.isFinite(e.webkitCompassAccuracy)?e.webkitCompassAccuracy:null,quality:Number.isFinite(e.webkitCompassAccuracy)&&e.webkitCompassAccuracy<0?'平台回報不可靠':'精度未保證／僅供參考',northReference:'平台絕對參考；真北／磁北未保證',alpha:e.alpha,beta:e.beta,gamma:e.gamma,screenAngle:screen.orientation?.angle??window.orientation??null,cameraBearing:null,cameraTransformEvidence:'未驗證裝置／螢幕／鏡頭轉換'};}
 let pending=[];
 async function commitPending(){while(pending.length){const item=pending[0];say('正在儲存原始影像…');await db.savePhoto(item.photo,item.blob);pending.shift();}await load();say('已儲存於本機（未上傳）');}
 const retry=text('button','重試未完成照片儲存');retry.onclick=()=>run(commitPending);$('camera').append(retry);
@@ -69,35 +75,38 @@ function completionReading(reading,time,limit){
   return reading?{...reading,ageAtAcquisitionCompletedMs:time-reading.readingAt,freshnessAtAcquisitionCompleted:time-reading.readingAt<=limit?'新鮮':'過期'}:null;
 }
 $('shutter').onclick=()=>run(async()=>{
-  if(busy||!stream)return;
+  if(busy||!stream||zoomState?.applying||zoomState?.factor===null||zoomState?.frameReady===false)return;
   // Timestamp the actual gesture, before any queued storage work.
   const buttonPressedAt=Date.now(),session=cameraSession,track=stream.getVideoTracks()[0],workDay=activeDay,screenAngle=screen.orientation?.angle??window.orientation??null;
   const location=buttonReading(gps,buttonPressedAt,10000),direction=buttonReading(heading,buttonPressedAt,2000);
-  busy=true;
+  const missing=[];if(!location||location.freshness==='過期')missing.push('GPS 未取得或過期');if(!direction||direction.freshness==='過期'||direction.accuracy<0)missing.push('方向未取得、過期或不可靠');if(missing.length&&!confirm(missing.join('；')+'。建議等待讀值／重新開啟。仍要拍照並保存缺值或未確認資料？'))return;
+  const z=zoomState,captureSettings=track.getSettings(),reportedZoom=Number.isFinite(captureSettings.zoom)?captureSettings.zoom:null,zoom={mode:z?.mode??'unknown',factor:z?.mode==='camera-api'?reportedZoom:(z?.factor??null),reportedTrackZoom:reportedZoom,meaning:'API 倍率非光學認證；數位倍率為目前影格的中央裁切；曝光時間未知'},useZoomFrame=zoom.factor!==1;
+  if(z?.mode==='camera-api'&&!zoomCapability({zoom:z.range},reportedZoom)){z.factor=null;z.frameReady=false;zoomUI();throw Error('拍照時相機未回報有效倍率，請重新開啟');}
+  busy=true;zoomUI();
   try{
     if(pending.length)await commitPending();
     if(session!==cameraSession||track.readyState==='ended')throw Error('相機已停止，請重新開啟後拍攝');
-    const acquisitionStartedAt=Date.now();let blob,method,frameCopiedAt=null;
+    const acquisitionStartedAt=Date.now();let blob,method,frameCopiedAt=null,outputWidth=null,outputHeight=null;
     try{
-      if(!window.ImageCapture)throw Error();
+      if(useZoomFrame||!window.ImageCapture)throw Error();
       blob=await new ImageCapture(track).takePhoto();method='ImageCapture.takePhoto';
     }catch(e){
       if(session!==cameraSession||track.readyState==='ended')throw Error('相機已停止，未擷取影像');
       const v=$('video');if(!v.videoWidth)throw Error('相機影格尚未就緒');
-      const c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;
-      c.getContext('2d').drawImage(v,0,0);frameCopiedAt=Date.now();
-      blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));method='瀏覽器影格擷取（非 RAW／感光元件原檔）';
+      const crop=cropRect(v.videoWidth,v.videoHeight,zoom.mode==='browser-digital-crop'?zoom.factor:1),c=document.createElement('canvas');c.width=crop.width;c.height=crop.height;
+      c.getContext('2d').drawImage(v,crop.sx,crop.sy,crop.sw,crop.sh,0,0,c.width,c.height);frameCopiedAt=Date.now();outputWidth=c.width;outputHeight=c.height;
+      blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));method=useZoomFrame?'變焦瀏覽器影格擷取（數位／API 縮放，非 RAW）':'瀏覽器影格擷取（非 RAW／感光元件原檔）';
     }
     const acquisitionCompletedAt=Date.now();
     if(!blob)throw Error('未取得影像');
     const id=crypto.randomUUID();
     pending.push({blob,photo:{id,source:'camera',capturedAt:null,buttonPressedAt,acquisitionStartedAt,acquisitionCompletedAt,frameCopiedAt,
       timingMeaning:'曝光時間未知；按鈕／呼叫開始／Blob 取得／影格複製均為瀏覽器裝置時鐘，非硬體曝光時間',
-      importedAt:null,originalName:id+'.jpg',mime:blob.type,captureMethod:method,
+      importedAt:null,originalName:id+(blob.type==='image/png'?'.png':blob.type==='image/webp'?'.webp':'.jpg'),mime:blob.type,captureMethod:method,
       location:completionReading(location,acquisitionCompletedAt,10000),heading:completionReading(direction,acquisitionCompletedAt,2000),
-      cameraFacing:track.getSettings().facingMode??'unknown',cameraBearing:null,workDay,screenAngle}});
+      cameraFacing:captureSettings.facingMode??'unknown',cameraBearing:null,workDay,screenAngle,zoom,outputWidth,outputHeight}});
     await commitPending();
-  }finally{busy=false;}
+  }finally{busy=false;zoomUI();}
 });
 $('import').onchange=()=>run(async()=>{const workDay=activeDay;for(const file of $('import').files){if(!file.type.startsWith('image/'))throw Error('請選取影像');pending.push({blob:file,photo:{id:crypto.randomUUID(),source:'gallery',originalName:file.name,mime:file.type,capturedAt:null,importedAt:Date.now(),fileLastModifiedAt:file.lastModified,location:null,heading:null,sourceExif:null,workDay,captureMethod:'原始檔案匯入；未解析 EXIF，預覽由瀏覽器解碼方向' }});}await commitPending();$('import').value='';});
 function choose(id){if(multi){selected.has(id)?selected.delete(id):selected.add(id);}else selected=selected.has(id)?new Set():new Set([id]);render();}
