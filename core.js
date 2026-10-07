@@ -11,7 +11,11 @@ export function validDay(day){if(typeof day!=='string'||!/^\d{4}-\d{2}-\d{2}$/.t
 export function workDayOf(p){return validDay(p.workDay)?p.workDay:localDay(p.buttonPressedAt??p.capturedAt??p.importedAt??p.createdAt??Date.now());}
 export function numberedPhoto(p){return `照片 ${String(p.photoNumber??'?').padStart(2,'0')}`;}
 export function numberedGroup(ids,photos){return '照片 '+ids.map(id=>String(photos.find(p=>p.id===id)?.photoNumber??'?').padStart(2,'0')).join('、');}
-export function previewRotation(p,width,height){if([0,90,180,270].includes(p.displayRotation))return p.displayRotation;if(height<=width)return 0;const angle=p.screenAngle??p.heading?.screenAngle;return angle===270||angle===-90?270:90;}
+export function previewRotation(p,width,height){if([0,90,180,270].includes(p.displayRotation))return p.displayRotation;const angle=p.screenAngle??p.heading?.screenAngle,base=height<=width?0:(angle===270||angle===-90?270:90);return (base+180)%360;}
+export function photoMinute(p){const time=p.buttonPressedAt??p.capturedAt??p.importedAt;if(!Number.isFinite(time))return '時間未取得';const d=new Date(time);if(!Number.isFinite(d.getTime()))return '時間未取得';const two=n=>String(n).padStart(2,'0');return `${d.getFullYear()}/${two(d.getMonth()+1)}/${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}${p.source==='gallery'?'(匯入)':''}`;}
+export function compactCoordinates(l){if(!l||!Number.isFinite(l.latitude)||!Number.isFinite(l.longitude)||Math.abs(l.latitude)>90||Math.abs(l.longitude)>180)return '座標未取得';const f=n=>n.toFixed(7).replace(/\.?0+$/,'');return `${f(l.latitude)},${f(l.longitude)}`;}
+export function compactDirection(h){const label=directionLabel(h?.degrees);if(!label)return '方向未取得';const notes=[];if(h.accuracy<0||(typeof h.quality==='string'&&h.quality.includes('不可靠')))notes.push('讀值不可靠');if((h.freshnessAtAcquisitionCompleted??h.freshness)==='過期')notes.push('讀值過期');notes.push('需驗證');return `${label}(${notes.join('，')})`;}
+export function compactPhotoLines(p,index){return [`${index+1}.照片${p?.photoNumber??'?'}`,p?photoMinute(p):'時間未取得',compactCoordinates(p?.location),compactDirection(p?.heading)];}
 
 // Half-open sectors: [337.5, 22.5) is north; labels describe opposite → reference.
 export function directionLabel(degrees){
