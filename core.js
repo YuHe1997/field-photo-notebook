@@ -8,6 +8,35 @@ export async function untar(blob){const a=new Uint8Array(await blob.arrayBuffer(
 
 export function localDay(time=Date.now()){const d=new Date(time);if(!Number.isFinite(d.getTime()))return null;return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 export function validDay(day){if(typeof day!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(day))return false;const [y,m,d]=day.split('-').map(Number),date=new Date(y,m-1,d);return date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d;}
+// Extract the first valid calendar day, preferring a record's title over its content.
+// Returns a normalized YYYY-MM-DD day, or null if no valid day is present.
+export function extractMonitoringDate(record){
+ const fields=typeof record==='string'?[record]:[record?.title,record?.content];
+ for(const field of fields){
+  if(typeof field!=='string')continue;
+  const dates=/(?<!\d)(\d{4})(?:年(\d{1,2})月(\d{1,2})日|-(\d{1,2})-(\d{1,2}))(?!\d)/g;
+  for(const match of field.matchAll(dates)){
+   const day=`${match[1]}-${(match[2]??match[4]).padStart(2,'0')}-${(match[3]??match[5]).padStart(2,'0')}`;
+   if(validDay(day))return day;
+  }
+ }
+ return null;
+}
+// Dates must be valid normalized days. Lexical order then equals calendar order.
+export function compareMonitoringDates(a,b){
+ if(!validDay(a)||!validDay(b))throw new TypeError('請使用有效 YYYY-MM-DD 日期比較');
+ return a<b?-1:a>b?1:0;
+}
+// Existing records must be chronological; equal dates retain their original order.
+// Unknown-date records are kept after dated records rather than guessed into a day.
+export function monitoringInsertionIndex(records,day){
+ if(!validDay(day))throw new TypeError('請使用有效 YYYY-MM-DD 插入日期');
+ for(let i=0;i<records.length;i++){
+  const existing=extractMonitoringDate(records[i]);
+  if(existing===null||compareMonitoringDates(existing,day)>0)return i;
+ }
+ return records.length;
+}
 export function workDayOf(p){return validDay(p.workDay)?p.workDay:localDay(p.buttonPressedAt??p.capturedAt??p.importedAt??p.createdAt??Date.now());}
 export function numberedPhoto(p){return `照片 ${String(p.photoNumber??'?').padStart(2,'0')}`;}
 export function numberedGroup(ids,photos){return '照片 '+ids.map(id=>String(photos.find(p=>p.id===id)?.photoNumber??'?').padStart(2,'0')).join('、');}

@@ -1,4 +1,5 @@
 import * as db from './db.js';
+import {authorize,hasToken,parseDriveId,uploadDayDoc} from './drive.js';
 import {preparePhotoGroups,photoTableDocx,tablePlan,monitoringDocx} from './docx.js';
 import {compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,previewRotation,zoomCapability,snapZoom,cropRect} from './core.js';
 const $=id=>document.getElementById(id),say=s=>$('status').textContent=s;
@@ -166,26 +167,50 @@ $('fillMonTemplate').onclick=()=>{
  saveMonForm(activeDay,readMonInputs());
  $('monStatus').textContent='已帶入新範本預設值並儲存草稿；請依當日現地觀察填寫作業與地層。';
 };
-$('exportMonDocx').onclick=()=>run(async()=>{
- const formData=readMonInputs();
- const day=activeDay,snapshot=await db.snapshot(),byId=new Map(snapshot.photos.map(p=>[p.id,p]));
+// The offline download and Drive export use the same committed snapshot preparation.
+async function prepareMonitoringDay(){
+ const day=activeDay,formData=readMonInputs(),snapshot=await db.snapshot(),byId=new Map(snapshot.photos.map(p=>[p.id,p]));
  const included=snapshot.groups.filter(g=>g.workDay===day||g.photoIds.some(id=>byId.has(id)&&workDayOf(byId.get(id))===day)).sort((a,b)=>(a.createdAt??a.updatedAt??0)-(b.createdAt??b.updatedAt??0)||a.id.localeCompare(b.id));
- $('monStatus').textContent='正在處理照片並生成完整 Word 監看紀錄...';
+ const prepared=included.length?await preparePhotoGroups(snapshot,included.map(g=>g.id)):[];
+ return {day,docBlob:await monitoringDocx(formData,prepared)};
+}
+let monitoringWorking=false;
+function monitoringControls(){ $('exportMonDocx').disabled=$('uploadDrive').disabled=monitoringWorking; }
+$('exportMonDocx').onclick=async()=>{
+ if(monitoringWorking)return;monitoringWorking=true;monitoringControls();
  try{
-  const prepared=included.length?await preparePhotoGroups(snapshot,included.map(g=>g.id)):[];
-  const docBlob=await monitoringDocx(formData,prepared);
+  $('monStatus').textContent='正在處理照片並生成完整 Word 監看紀錄…';
+  const {day,docBlob}=await prepareMonitoringDay();
   const url=URL.createObjectURL(docBlob),a=document.createElement('a');
-  a.href=url;
-  a.download=`${formData.date||day}_施工監看紀錄.docx`;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),60000);
-  $('monStatus').textContent='已成功下載完整監看紀錄 Word (.docx)！';
- }catch(e){
-  $('monStatus').textContent='匯出失敗：'+e.message;
- }
-});
+  a.href=url;a.download=`${loadMonForm(day)?.date||day}_施工監看紀錄.docx`;
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  $('monStatus').textContent='已交給瀏覽器下載完整監看紀錄 Word (.docx)；請確認下載完成。';
+ }catch(e){$('monStatus').textContent='匯出失敗：'+e.message;}
+ finally{monitoringWorking=false;monitoringControls();}
+};
+$('connectDrive').onclick=async()=>{
+ $('connectDrive').disabled=true;
+ try{await authorize();$('driveAccount').textContent='已取得 Google Drive 授權（僅本頁有效；過期時須重新授權）。';}
+ catch(e){$('driveAccount').textContent='授權失敗：'+e.message;}
+ finally{$('connectDrive').disabled=false;}
+};
+$('uploadDrive').onclick=async()=>{
+ if(monitoringWorking)return;
+ let folderId;
+ try{folderId=parseDriveId($('driveFolder').value);}catch(e){$('driveStatus').textContent=e.message;return;}
+ monitoringWorking=true;monitoringControls();$('driveResult').replaceChildren();
+ try{
+  // Request consent in direct response to the user's tap, before expensive async generation.
+  await authorize();$('driveAccount').textContent='已取得 Google Drive 授權（僅本頁有效）。';
+  $('driveStatus').textContent='正在本機生成當日文件並上傳；請勿重複點擊…';
+  const {day,docBlob}=await prepareMonitoringDay();
+  const file=await uploadDayDoc(day,docBlob,folderId);
+  const link=document.createElement('a');link.href=file.webViewLink;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Open Google Doc（開啟 Google 文件）';
+  $('driveResult').append(link);
+  $('driveStatus').textContent=`已上傳 ${file.name||day} 並轉為 Google Doc。轉換可能改變版面，請開啟檢查。此操作不會同步本機資料。`;
+ }catch(e){$('driveStatus').textContent=`${e.kind==='auth'?'授權':e.kind==='network'?'網路':e.kind==='api'?'Drive API':'匯出'}失敗：${e.message}`;if(!hasToken())$('driveAccount').textContent='尚未授權或授權已過期；請重新登入。';}
+ finally{monitoringWorking=false;monitoringControls();}
+};
 $('persist').onclick=()=>run(async()=>{const ok=await navigator.storage?.persist?.();say(ok?'瀏覽器允許持續儲存，仍須備份':'未取得持續儲存保證，請備份');});
 run(async()=>{await load();const s=await navigator.storage?.estimate?.();$('storage').textContent=s?`使用約 ${(s.usage/1048576).toFixed(1)} MB / 配額約 ${(s.quota/1048576).toFixed(0)} MB（可能變動）`:'無法取得配額';});
 if('serviceWorker' in navigator&&isSecureContext)run(async()=>{await navigator.serviceWorker.register('./sw.js',{scope:'./'});await navigator.serviceWorker.ready;const update=()=>{$('offline').textContent=navigator.serviceWorker.controller?'離線殼已受控制；照片只存 IndexedDB，仍需備份。':'離線殼已安裝，重新載入後確認控制。';};update();navigator.serviceWorker.addEventListener('controllerchange',update);});
