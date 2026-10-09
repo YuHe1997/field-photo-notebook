@@ -143,40 +143,11 @@ function loadMonForm(day){
 function saveMonForm(day,data){
  localStorage.setItem(monKey(day),JSON.stringify(data));
 }
-function readMonInputs(){
- return {
-  projectName: $('monProject').value.trim(),
-  date: $('monDate').value.trim(),
-  constructionUnit: $('monUnit').value.trim(),
-  watcherCount: $('monWatchers').value.trim(),
-  siteName: $('monSite').value.trim(),
-  workScope: $('monWorkScope').value.trim(),
-  soilTexture: $('monSoilTexture').value.trim(),
-  soilColor: $('monSoilColor').value.trim(),
-  strataDesc: $('monStrata').value.trim(),
-  findsDesc: $('monFinds').value.trim(),
-  suggestions: $('monSuggestions').value.trim(),
-  otherEvents: $('monOtherEvents').value.trim(),
-  notes: $('monNotes').value.trim()
- };
-}
-function fillMonInputs(data){
- if(!data)return;
- $('monProject').value=data.projectName||'';
- $('monDate').value=data.date||'';
- $('monUnit').value=data.constructionUnit||'';
- $('monWatchers').value=data.watcherCount||'';
- $('monSite').value=data.siteName||'';
- $('monWorkScope').value=data.workScope||'';
- $('monSoilTexture').value=data.soilTexture||'';
- $('monSoilColor').value=data.soilColor||'';
- $('monStrata').value=data.strataDesc||'';
- $('monFinds').value=data.findsDesc||'';
- $('monSuggestions').value=data.suggestions||'';
- $('monOtherEvents').value=data.otherEvents||'';
- $('monNotes').value=data.notes||'';
-}
+const monFields={projectName:'monProject',date:'monDate',constructionLocation:'monLocation',siteName:'monSite',watcherCount:'monWatchers',workScope:'monWorkScope',strataSummary:'monStrataSummary',strataDesc:'monStrata',culturalArtifacts:'monArtifacts',culturalFeatures:'monFeatures',otherEvents:'monOtherEvents',dispositionAdvice:'monAdvice'};
+function readMonInputs(){return Object.fromEntries(Object.entries(monFields).map(([key,id])=>[key,$(id).value.trim()]));}
+function fillMonInputs(data){for(const [key,id] of Object.entries(monFields))$(id).value=data?.[key]||'';}
 function updateMonUI(){
+ fillMonInputs(null);
  const data=loadMonForm(activeDay);
  if(data){
   fillMonInputs(data);
@@ -190,34 +161,18 @@ $('monForm').addEventListener('input',()=>{
  $('monStatus').textContent='草稿已自動儲存於本機。';
 });
 $('fillMonTemplate').onclick=()=>{
- $('monProject').value='南科嘉義園區二期基地土地開發工程';
  const [y,m,d]=activeDay.split('-');
- $('monDate').value=`${y}年${parseInt(m,10)}月${parseInt(d,10)}日`;
- $('monUnit').value='光順營造股份有限公司、新都營造工程有限公司';
- $('monWatchers').value='1';
- $('monSite').value='太保農場遺址';
- $('monWorkScope').value='1.光順營造股份有限公司：進行開挖作業。\\n2.新都營造工程有限公司：進行整地及放樣作業。';
- $('monSoilTexture').value='細砂壤土、砂壤土、砂壤土';
- $('monSoilColor').value='暗灰褐色、黃褐色、灰色';
- $('monStrata').value='地表下0~50公分為耕作土，土色土質為暗灰褐色細砂壤土，50~100公分土色均勻為沖積層黃褐細粉砂土。';
- $('monFinds').value='無考古遺物出土。';
- $('monSuggestions').value='建議持續監看，監看過程中如發現任何涉文化資產標的，將依《文化資產保存法》第33條、第57條、第77條、第88條規定辦理。若有發現疑似考古遺址文化資產時，將即通報主管機關依照「文化資產保存法施行細則第27條及27之1條」辦理。';
- $('monOtherEvents').value='未運出';
- $('monNotes').value='';
+ fillMonInputs({projectName:'南部科學園區嘉義園區二期',date:`${y}年${parseInt(m,10)}月${parseInt(d,10)}日`,constructionLocation:'嘉義太保市',siteName:'太保農場遺址',watcherCount:'1',workScope:'',strataSummary:'',strataDesc:'',culturalArtifacts:'無。',culturalFeatures:'無。',otherEvents:'無。',dispositionAdvice:'鄰近太保農場遺址，若有下挖，應持續監看。'});
  saveMonForm(activeDay,readMonInputs());
- $('monStatus').textContent='已帶入範本預設值並儲存草稿。';
+ $('monStatus').textContent='已帶入新範本預設值並儲存草稿；請依當日現地觀察填寫作業與地層。';
 };
 $('exportMonDocx').onclick=()=>run(async()=>{
  const formData=readMonInputs();
  const day=activeDay,snapshot=await db.snapshot(),byId=new Map(snapshot.photos.map(p=>[p.id,p]));
  const included=snapshot.groups.filter(g=>g.workDay===day||g.photoIds.some(id=>byId.has(id)&&workDayOf(byId.get(id))===day)).sort((a,b)=>(a.createdAt??a.updatedAt??0)-(b.createdAt??b.updatedAt??0)||a.id.localeCompare(b.id));
- if(!included.length){
-  say('本工作日尚無已儲存的紀錄集／照片，請先建立紀錄集後再匯出完整監看紀錄。');
-  return;
- }
  $('monStatus').textContent='正在處理照片並生成完整 Word 監看紀錄...';
  try{
-  const prepared=await preparePhotoGroups(snapshot,included.map(g=>g.id));
+  const prepared=included.length?await preparePhotoGroups(snapshot,included.map(g=>g.id)):[];
   const docBlob=await monitoringDocx(formData,prepared);
   const url=URL.createObjectURL(docBlob),a=document.createElement('a');
   a.href=url;

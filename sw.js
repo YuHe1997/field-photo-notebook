@@ -1,4 +1,4 @@
-const CACHE='field-photo-notebook-shell-1f658f023e9e0084',FILES=['./','./index.html','./style.css','./app.js','./core.js','./db.js','./docx.js','./manifest.webmanifest','./icon.svg'];
+const CACHE='field-photo-notebook-shell-c4c18dff8794afae',FILES=['./','./index.html','./style.css','./app.js','./core.js','./db.js','./docx.js','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES))));
 self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch',e=>{if(e.request.method!=='GET'||new URL(e.request.url).origin!==self.location.origin)return;const url=new URL(e.request.url);if(!FILES.some(p=>new URL(p,self.registration.scope).href===url.href))return;e.respondWith(caches.open(CACHE).then(async c=>(await c.match(e.request))||fetch(e.request)));});
