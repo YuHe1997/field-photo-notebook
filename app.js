@@ -1,5 +1,5 @@
 import * as db from './db.js';
-import {preparePhotoGroups,photoTableDocx,tablePlan} from './docx.js';
+import {preparePhotoGroups,photoTableDocx,tablePlan,monitoringDocx} from './docx.js';
 import {compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,previewRotation,zoomCapability,snapZoom,cropRect} from './core.js';
 const $=id=>document.getElementById(id),say=s=>$('status').textContent=s;
 let photos=[],assets=[],groups=[],selected=new Set(),multi=false,edit=null,editBaseline=null,urls={gallery:[],groups:[],order:[]},stream=null,watch=null,gps=null,heading=null,sensorState='尚未啟用',active='camera',starting=false,busy=false,rotating=false,cameraSession=0,zoomState=null,directionStatus='尚未啟用',gpsStatus='尚未啟用';
@@ -26,7 +26,7 @@ window.addEventListener('beforeunload',e=>{if(editorDirty()||pending.length||bus
 function stop(){cameraSession++;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(watch!==null)navigator.geolocation.clearWatch(watch);watch=null;gps=null;heading=null;zoomState?.cancelFrame?.();zoomState=null;directionStatus=gpsStatus='已停止';window.removeEventListener('deviceorientation',onOrientation);window.removeEventListener('deviceorientationabsolute',onOrientation);sensorState='感測已停止';zoomUI();sensors();}
 function sensors(){ $('sensor').textContent=`${sensorState}；GPS 狀態：${gpsStatus}；方向狀態：${directionStatus}；GPS：${gps?`${gps.latitude.toFixed(6)}, ${gps.longitude.toFixed(6)} ±${gps.accuracyM}m；${Date.now()-gps.readingAt<=10000?'新鮮':'過期'}；${gps.accuracyM>20?'約略':'精度非保證'}`:'未取得'}；裝置羅盤：${heading?`裝置參考推估：${directionLabel(heading.degrees)}；${heading.degrees.toFixed(1)}°；${heading.quality}；${Date.now()-heading.readingAt<=2000?'新鮮':'過期'}（僅供參考）`:'未取得絕對方位'}；鏡頭朝向：無法可靠判定` ;}
 setInterval(sensors,1000);
-function tab(name){if(name==='editor'&&!edit)return;if(name!=='camera')stop();active=name;for(const n of ['camera','photos','groups'])$(n).hidden=n!==name;$('editor').hidden=name!=='editor'||!edit;$('editingTab').hidden=$('appendToEditor').hidden=!edit;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.tab===name));if(name==='editor'){renderOrder();$('editor').scrollIntoView({block:'start'});const h=$('editor').querySelector('h2');h.tabIndex=-1;h.focus({preventScroll:true});}}
+function tab(name){if(name==='editor'&&!edit)return;if(name!=='camera')stop();active=name;for(const n of ['camera','photos','groups','monitoring'])$(n).hidden=n!==name;$('editor').hidden=name!=='editor'||!edit;$('editingTab').hidden=$('appendToEditor').hidden=!edit;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.tab===name));if(name==='editor'){renderOrder();$('editor').scrollIntoView({block:'start'});const h=$('editor').querySelector('h2');h.tabIndex=-1;h.focus({preventScroll:true});}if(name==='monitoring')updateMonUI();}
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
 function currentCamera(session){return session===cameraSession&&active==='camera'&&!document.hidden;}
 function beginDirection(session){const E=window.DeviceOrientationEvent;if(!E){directionStatus='不支援方向感測';sensors();return;}directionStatus='等待方向授權';let permission;try{permission=typeof E.requestPermission==='function'?E.requestPermission(true):Promise.resolve('granted');}catch(e){permission=Promise.reject(e);}Promise.resolve(permission).then(result=>{if(!currentCamera(session))return;if(result!=='granted'){directionStatus='方向權限被拒絕';sensors();return;}window.addEventListener('deviceorientation',onOrientation);window.addEventListener('deviceorientationabsolute',onOrientation);directionStatus='已啟用，等待絕對方位讀值';sensors();},e=>{if(currentCamera(session)){directionStatus='方向授權失敗：'+e.message;sensors();}});}
@@ -118,7 +118,7 @@ function renderOrder(focus){$('title').value=groupTitle(edit.photoIds);releaseIm
 $('compose').onclick=()=>{if(!selected.size){say('請先選照片');return;}openEditor();};$('appendToEditor').onclick=()=>{if(!edit)return;const day=edit.workDay??workDayOf(photos.find(p=>p.id===edit.photoIds[0])??{});if([...selected].some(id=>workDayOf(photos.find(p=>p.id===id))!==day)){say('請勿將不同工作日的照片加入同一記事。');return;}edit.photoIds=[...new Set([...edit.photoIds,...selected])];tab('editor');};$('addSelected').onclick=()=>{if(edit){tab('photos');say('請選取照片，再按「加入目前記事並返回」。');}};$('cancel').onclick=()=>{if(!canDiscardEditor())return;const returnTab=groups.some(g=>g.id===edit?.id)?'groups':'photos';$('editor').hidden=true;edit=null;editBaseline=null;releaseImages('order');render();tab(returnTab);};$('save').onclick=()=>run(async()=>{if(!edit)return;const title=groupTitle(edit.photoIds),g={...edit,title,notes:edit.notes??'',engineering:$('engineering').value,updatedAt:Date.now()};if(edit.title&&edit.title!==title&&!edit.legacyTitle)g.legacyTitle=edit.title;validateGroup(g,new Set(photos.map(p=>p.id)));await db.saveGroup(g);$('editor').hidden=true;edit=null;editBaseline=null;releaseImages('order');selected.clear();await load();say('紀錄集已儲存');tab('groups');});
 $('backup').onclick=()=>run(async()=>{say('正在建立本機備份（交易快照；不含未提交資料）…');const snapshot=await db.snapshot();const entries=[],records=[];for(const p of snapshot.photos){const blob=snapshot.assets.find(a=>a.id===p.id)?.original;if(!blob)throw Error('原始影像缺失');const path=`originals/${p.id}.bin`;entries.push([path,blob]);records.push({...p,path,size:blob.size,sha256:await digest(blob)});}for(const g of snapshot.groups)validateGroup(g,new Set(snapshot.photos.map(p=>p.id)));const manifest={schema:1,createdAt:Date.now(),snapshotStartedAt:snapshot.startedAt,snapshotCompletedAt:snapshot.completedAt,completeness:'單一唯讀交易中的已提交資料；不含未儲存表單／待存照片／快照之後提交資料',photos:records,groups:snapshot.groups,workDays:dayState.days,activeWorkDay:activeDay??localDay(),numberCounters:db.numberCounters()};entries.push(['manifest.json',new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'})],['notes.txt',new Blob([snapshot.groups.map(g=>`${g.title}\n工作日：${g.workDay??'舊版請參照各照片 workDay'}\n工程描述：${g.engineering}\n${g.notes?'舊版備註（保留）：'+g.notes+'\n':''}${g.legacyTitle?'舊版名稱（保留）：'+g.legacyTitle+'\n':''}順序：${g.photoIds.join(', ')}\n`).join('\n')])],['README.txt',new Blob(['原始影像在 originals/；檔名與 MIME 在 manifest.json。GPS 是裝置位置；方向不是可靠鏡頭朝向。相機讀值以按鈕時間為基準，不是曝光資料。舊版 capturedAt / ageAtShutterMs 亦是按鈕時間／年齡。沒有 EXIF 嵌入或雲端同步。'])]);const archive=await tar(entries),url=URL.createObjectURL(archive),a=document.createElement('a');a.href=url;a.download=`field-notebook-${Date.now()}.tar`;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);say('已交給瀏覽器下載；請確認下載完成（無法驗證使用者是否取消）');});
 $('restore').onchange=()=>run(async()=>{const file=$('restore').files[0];if(!file)return;say('驗證備份中…');const entries=await untar(file),m=JSON.parse(await entries.get('manifest.json')?.text());if(m.schema!==1||!Array.isArray(m.photos)||!Array.isArray(m.groups))throw Error('不支援的備份');if(m.workDays!==undefined&&(!Array.isArray(m.workDays)||m.workDays.some(d=>!validDay(d))))throw Error('工作日格式無效');if(m.activeWorkDay!==undefined&&!validDay(m.activeWorkDay))throw Error('目前工作日格式無效');if(m.numberCounters!==undefined&&(typeof m.numberCounters!=='object'||m.numberCounters===null||Array.isArray(m.numberCounters)||Object.entries(m.numberCounters).some(([d,n])=>!validDay(d)||!Number.isSafeInteger(n)||n<1)))throw Error('編號計數格式無效');const incomingNumbers=new Set();const ids=new Set(),gids=new Set(),staged=[];for(const p of m.photos){if(p.workDay!==undefined&&!validDay(p.workDay)||p.photoNumber!==undefined&&(!Number.isSafeInteger(p.photoNumber)||p.photoNumber<1)||p.displayRotation!==undefined&&![0,90,180,270].includes(p.displayRotation))throw Error('照片工作日／編號／旋轉格式無效');if(p.workDay&&p.photoNumber){const numberKey=p.workDay+':'+p.photoNumber;if(incomingNumbers.has(numberKey)||photos.some(x=>x.workDay===p.workDay&&x.photoNumber===p.photoNumber))throw Error('工作日照片編號重複或與本機衝突');incomingNumbers.add(numberKey);}if(typeof p.id!=='string'||!/^[-a-zA-Z0-9]+$/.test(p.id)||ids.has(p.id)||photos.some(x=>x.id===p.id)||p.path!==`originals/${p.id}.bin`||typeof p.originalName!=='string'||!['camera','gallery'].includes(p.source)||typeof p.mime!=='string'||!p.mime.startsWith('image/'))throw Error('照片格式／ID 重複或與本機衝突');ids.add(p.id);const b=entries.get(p.path);if(!b||b.size!==p.size||await digest(b)!==p.sha256)throw Error('影像大小或雜湊不符');const {path,size,sha256,...photo}=p;staged.push({photo,blob:new Blob([b],{type:p.mime})});}for(const g of m.groups){if(typeof g.id!=='string'||typeof g.title!=='string'||typeof g.notes!=='string'||typeof g.engineering!=='string'||gids.has(g.id)||groups.some(x=>x.id===g.id))throw Error('紀錄集格式／ID 衝突');gids.add(g.id);validateGroup(g,ids);}if(!confirm(`已驗證 ${staged.length} 張照片、${m.groups.length} 組，匯入本機？`))return;await db.transaction(['photos','assets','groups'],tx=>{for(const x of staged){tx.objectStore('photos').add(x.photo);tx.objectStore('assets').add({id:x.photo.id,original:x.blob});}for(const g of m.groups)tx.objectStore('groups').add(g);});db.mergeCounters(m.numberCounters);for(const day of m.workDays??[])if(validDay(day))dayState.days.push(day);dayState.days=[...new Set(dayState.days)];activeDay=validDay(m.activeWorkDay)?m.activeWorkDay:null;if(activeDay)rememberDay(activeDay);await load();say('備份已完整還原（原圖與顯示旋轉分開保存）');$('restore').value='';});
-async function changeDay(day){if(!validDay(day))throw Error('日期請使用有效 YYYY-MM-DD');if(busy||pending.length||rotating)throw Error('請先完成照片儲存或旋轉再切換工作日');if(!canDiscardEditor()){$('workDay').value=activeDay;return;}stop();rememberDay(day);edit=null;editBaseline=null;$('editor').hidden=true;releaseImages('order');selected.clear();multi=false;if(active==='editor')tab('photos');await load();say(`已切換工作日 ${day}，其他日期照片仍保留`);}
+async function changeDay(day){if(!validDay(day))throw Error('日期請使用有效 YYYY-MM-DD');if(busy||pending.length||rotating)throw Error('請先完成照片儲存或旋轉再切換工作日');if(!canDiscardEditor()){$('workDay').value=activeDay;return;}stop();rememberDay(day);edit=null;editBaseline=null;$('editor').hidden=true;releaseImages('order');selected.clear();multi=false;if(active==='editor')tab('photos');await load();updateMonUI();say(`已切換工作日 ${day}，其他日期照片仍保留`);}
 $('workDay').onchange=()=>run(async()=>{try{await changeDay($('workDay').value);}catch(e){$('workDay').value=activeDay;throw e;}});
 $('newDay').onclick=()=>run(async()=>{const day=prompt('新工作日日期（YYYY-MM-DD）。只分開整理，不清除照片，也不改拍照時間。',localDay());if(day===null)return;await changeDay(day.trim());});
 $('deleteSelected').onclick=()=>run(async()=>{if(edit&&(editorDirty()||groups.some(g=>g.id===edit.id))){say('請先儲存或關閉記事，再刪除照片。');return;}const ids=[...selected];if(!ids.length)return;if(groups.some(g=>g.photoIds.some(id=>ids.includes(id))))throw Error('已有記事的照片請先移出紀錄集再刪除');if(!confirm(`永久刪除 ${ids.length} 張照片及原圖？無法復原，建議先下載完整備份。`))return;await db.deletePhotos(ids);if(edit){edit=null;editBaseline=null;$('editor').hidden=true;releaseImages('order');}for(const id of ids){rotations.delete(id);for(const k of previewCache.keys())if(k.startsWith(id+':'))previewCache.delete(k);}selected.clear();await load();say(`已永久刪除 ${ids.length} 張照片；其他照片編號不變`);});
@@ -134,6 +134,103 @@ $('closeExport').onclick=()=>$('exportDialog').close();$('exportDialog').addEven
 $('prepareWord').onclick=async()=>{if(exportWorking||!$('exportDialog').open||!exportSnapshot)return;const token=++exportGeneration;exportController?.abort();exportController=new AbortController();const signal=exportController.signal,ids=exportOrder.filter(id=>exportSelected.has(id));exportWorking=true;resetExportPreview();exportControls();try{const prepared=await preparePhotoGroups(exportSnapshot,ids,{signal,onProgress:(n,total)=>{if(token===exportGeneration)$('exportStatus').textContent=`正在本機整理照片 ${n}/${total}，不會上傳…`;}});if(token!==exportGeneration||!$('exportDialog').open)return;const blob=await photoTableDocx(prepared);if(token!==exportGeneration||!$('exportDialog').open)return;const table=document.createElement('table');table.className='docx-preview-table';const body=document.createElement('tbody');for(const row of tablePlan(prepared)){const tr=document.createElement('tr');if(row.kind==='description'){const td=document.createElement('td');td.colSpan=2;const p=text('p',row.engineering);p.className='note-text';td.append(p);tr.append(td);}else for(let i=0;i<2;i++){const td=document.createElement('td'),photo=row.photos[i];if(photo){const im=document.createElement('img'),url=URL.createObjectURL(photo.blob);exportUrls.push(url);im.src=url;im.alt=photoLabel(exportSnapshot.photos.find(p=>p.id===photo.photoId));td.append(im);}else{const blank=text('div','');blank.className='empty-export-photo';blank.setAttribute('aria-label','本列無第二張照片');td.append(blank);}tr.append(td);}body.append(tr);}table.append(body);$('exportPreview').append(text('p','以下為連續表格預覽；Word 會依頁面長度自動跨頁。'),table);exportBlob=blob;const low=prepared.flatMap(g=>g.photos).filter(p=>Math.max(p.width,p.height)<800).length;$('exportStatus').textContent=`表格已製作完成，${prepared.length} 組／${prepared.reduce((n,g)=>n+g.photos.length,0)} 張；可下載可編輯 Word。${low?'其中 '+low+' 張解析度較低，列印放大可能模糊。':''}`;}catch(e){if(token===exportGeneration&&e.name!=='AbortError'){resetExportPreview();$('exportStatus').textContent='匯出未完成：'+e.message+'；原始資料未改動。';}}finally{if(token===exportGeneration){exportWorking=false;exportControls();}}};
 $('downloadWord').onclick=()=>{if(!exportBlob||exportWorking)return;const url=URL.createObjectURL(exportBlob),a=document.createElement('a');a.href=url;a.download=`照片表格-${exportDay}.docx`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);$('exportStatus').textContent='已交給瀏覽器下載 Word；請確認檔案存在並用 Word／相容軟體開啟。這不是完整原圖／中繼資料備份。';};
 window.addEventListener('pagehide',()=>exportController?.abort());
+function monKey(day){return `field-mon-form-${day}`;}
+function loadMonForm(day){
+ const raw=localStorage.getItem(monKey(day));
+ if(!raw)return null;
+ try{return JSON.parse(raw);}catch{return null;}
+}
+function saveMonForm(day,data){
+ localStorage.setItem(monKey(day),JSON.stringify(data));
+}
+function readMonInputs(){
+ return {
+  projectName: $('monProject').value.trim(),
+  date: $('monDate').value.trim(),
+  constructionUnit: $('monUnit').value.trim(),
+  watcherCount: $('monWatchers').value.trim(),
+  siteName: $('monSite').value.trim(),
+  workScope: $('monWorkScope').value.trim(),
+  soilTexture: $('monSoilTexture').value.trim(),
+  soilColor: $('monSoilColor').value.trim(),
+  strataDesc: $('monStrata').value.trim(),
+  findsDesc: $('monFinds').value.trim(),
+  suggestions: $('monSuggestions').value.trim(),
+  otherEvents: $('monOtherEvents').value.trim(),
+  notes: $('monNotes').value.trim()
+ };
+}
+function fillMonInputs(data){
+ if(!data)return;
+ $('monProject').value=data.projectName||'';
+ $('monDate').value=data.date||'';
+ $('monUnit').value=data.constructionUnit||'';
+ $('monWatchers').value=data.watcherCount||'';
+ $('monSite').value=data.siteName||'';
+ $('monWorkScope').value=data.workScope||'';
+ $('monSoilTexture').value=data.soilTexture||'';
+ $('monSoilColor').value=data.soilColor||'';
+ $('monStrata').value=data.strataDesc||'';
+ $('monFinds').value=data.findsDesc||'';
+ $('monSuggestions').value=data.suggestions||'';
+ $('monOtherEvents').value=data.otherEvents||'';
+ $('monNotes').value=data.notes||'';
+}
+function updateMonUI(){
+ const data=loadMonForm(activeDay);
+ if(data){
+  fillMonInputs(data);
+ }else{
+  const [y,m,d]=activeDay.split('-');
+  $('monDate').value=`${y}年${parseInt(m,10)}月${parseInt(d,10)}日`;
+ }
+}
+$('monForm').addEventListener('input',()=>{
+ saveMonForm(activeDay,readMonInputs());
+ $('monStatus').textContent='草稿已自動儲存於本機。';
+});
+$('fillMonTemplate').onclick=()=>{
+ $('monProject').value='南科嘉義園區二期基地土地開發工程';
+ const [y,m,d]=activeDay.split('-');
+ $('monDate').value=`${y}年${parseInt(m,10)}月${parseInt(d,10)}日`;
+ $('monUnit').value='光順營造股份有限公司、新都營造工程有限公司';
+ $('monWatchers').value='1';
+ $('monSite').value='太保農場遺址';
+ $('monWorkScope').value='1.光順營造股份有限公司：進行開挖作業。\\n2.新都營造工程有限公司：進行整地及放樣作業。';
+ $('monSoilTexture').value='細砂壤土、砂壤土、砂壤土';
+ $('monSoilColor').value='暗灰褐色、黃褐色、灰色';
+ $('monStrata').value='地表下0~50公分為耕作土，土色土質為暗灰褐色細砂壤土，50~100公分土色均勻為沖積層黃褐細粉砂土。';
+ $('monFinds').value='無考古遺物出土。';
+ $('monSuggestions').value='建議持續監看，監看過程中如發現任何涉文化資產標的，將依《文化資產保存法》第33條、第57條、第77條、第88條規定辦理。若有發現疑似考古遺址文化資產時，將即通報主管機關依照「文化資產保存法施行細則第27條及27之1條」辦理。';
+ $('monOtherEvents').value='未運出';
+ $('monNotes').value='';
+ saveMonForm(activeDay,readMonInputs());
+ $('monStatus').textContent='已帶入範本預設值並儲存草稿。';
+};
+$('exportMonDocx').onclick=()=>run(async()=>{
+ const formData=readMonInputs();
+ const day=activeDay,snapshot=await db.snapshot(),byId=new Map(snapshot.photos.map(p=>[p.id,p]));
+ const included=snapshot.groups.filter(g=>g.workDay===day||g.photoIds.some(id=>byId.has(id)&&workDayOf(byId.get(id))===day)).sort((a,b)=>(a.createdAt??a.updatedAt??0)-(b.createdAt??b.updatedAt??0)||a.id.localeCompare(b.id));
+ if(!included.length){
+  say('本工作日尚無已儲存的紀錄集／照片，請先建立紀錄集後再匯出完整監看紀錄。');
+  return;
+ }
+ $('monStatus').textContent='正在處理照片並生成完整 Word 監看紀錄...';
+ try{
+  const prepared=await preparePhotoGroups(snapshot,included.map(g=>g.id));
+  const docBlob=await monitoringDocx(formData,prepared);
+  const url=URL.createObjectURL(docBlob),a=document.createElement('a');
+  a.href=url;
+  a.download=`${formData.date||day}_施工監看紀錄.docx`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+  $('monStatus').textContent='已成功下載完整監看紀錄 Word (.docx)！';
+ }catch(e){
+  $('monStatus').textContent='匯出失敗：'+e.message;
+ }
+});
 $('persist').onclick=()=>run(async()=>{const ok=await navigator.storage?.persist?.();say(ok?'瀏覽器允許持續儲存，仍須備份':'未取得持續儲存保證，請備份');});
 run(async()=>{await load();const s=await navigator.storage?.estimate?.();$('storage').textContent=s?`使用約 ${(s.usage/1048576).toFixed(1)} MB / 配額約 ${(s.quota/1048576).toFixed(0)} MB（可能變動）`:'無法取得配額';});
 if('serviceWorker' in navigator&&isSecureContext)run(async()=>{await navigator.serviceWorker.register('./sw.js',{scope:'./'});await navigator.serviceWorker.ready;const update=()=>{$('offline').textContent=navigator.serviceWorker.controller?'離線殼已受控制；照片只存 IndexedDB，仍需備份。':'離線殼已安裝，重新載入後確認控制。';};update();navigator.serviceWorker.addEventListener('controllerchange',update);});
