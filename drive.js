@@ -36,13 +36,13 @@ function gis(){
  }).catch(e=>{loading=null;throw e;});
  return loading;
 }
-export async function authorize(){
- if(token&&Date.now()<expiresAt-60000)return token;
+export async function authorize(forceSelect=false){
+ if(!forceSelect&&token&&Date.now()<expiresAt-60000)return token;
  if(authorizing)return authorizing;
- authorizing=authorizeFresh().finally(()=>{authorizing=null;});
+ authorizing=authorizeFresh(forceSelect?'select_account':'').finally(()=>{authorizing=null;});
  return authorizing;
 }
-async function authorizeFresh(){
+async function authorizeFresh(promptMode='select_account'){
  const oauth=await gis();
  return new Promise((resolve,reject)=>{
   if(!client)client=oauth.initTokenClient({client_id:CLIENT_ID,scope:SCOPE,callback:()=>{}});
@@ -51,7 +51,7 @@ async function authorizeFresh(){
    token=result.access_token;expiresAt=Date.now()+(Number(result.expires_in)||3600)*1000;resolve(token);
   };
   client.error_callback=error=>reject(new DriveError('auth',`Google 登入中斷：${error.type||'視窗關閉或遭封鎖'}`));
-  try{client.requestAccessToken({prompt:token?'':'consent'});}catch(e){reject(new DriveError('auth',`無法開啟 Google 授權：${e.message}`));}
+  try{client.requestAccessToken({prompt:promptMode});}catch(e){reject(new DriveError('auth',`無法開啟 Google 授權：${e.message}`));}
  });
 }
 export function hasToken(){return !!token&&Date.now()<expiresAt-60000;}

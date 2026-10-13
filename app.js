@@ -949,6 +949,17 @@ async function refreshFolderList(parentId){
  }
 }
 
+$('switchGoogleAccount')?.addEventListener('click',async()=>{
+ const statusEl=$('photoDriveStatus');
+ if(statusEl)statusEl.textContent='正在開啟 Google 帳號選擇視窗…';
+ try{
+  await authorize(true);
+  if(statusEl)statusEl.textContent='已成功切換 Google 帳號！';
+ }catch(e){
+  if(statusEl)statusEl.textContent='帳號切換未完成：'+e.message;
+ }
+});
+
 $('browseDriveFolders')?.addEventListener('click',async()=>{
  const inputVal=$('photoDriveFolder').value.trim();
  let folderId=null;
