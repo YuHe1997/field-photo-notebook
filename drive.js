@@ -65,12 +65,21 @@ async function api(url,options={}){
  }
  try{return await response.json();}catch{throw new DriveError('api','Google API 回應格式不正確；請先檢查 Drive 再重試。');}
 }
-export async function listSubfolders(parentId){
- const q=parentId
-  ? `'${parentId}' in parents and mimeType = '${FOLDER}' and trashed = false`
-  : `'root' in parents and mimeType = '${FOLDER}' and trashed = false`;
- const data=await api(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,capabilities(canAddChildren))&supportsAllDrives=true&includeItemsFromAllDrives=true`);
- return data.files||[];
+export async function listSubfolders(parentId,{shared=false}={}){
+ const parent=parentId||'root';
+ if(!/^[\w-]+$/.test(parent))throw new DriveError('input','資料夾 ID 格式無效。');
+ const location=shared?'sharedWithMe = true':`'${parent}' in parents`;
+ const q=`${location} and mimeType = '${FOLDER}' and trashed = false`;
+ const files=[];let pageToken;const seen=new Set();
+ do{
+  const params=new URLSearchParams({q,fields:'nextPageToken,files(id,name,capabilities(canAddChildren))',pageSize:'100',orderBy:'name',supportsAllDrives:'true',includeItemsFromAllDrives:'true'});
+  if(pageToken)params.set('pageToken',pageToken);
+  const data=await api(`https://www.googleapis.com/drive/v3/files?${params}`);
+  files.push(...(data.files||[]));pageToken=data.nextPageToken;
+  if(pageToken&&seen.has(pageToken))throw new DriveError('api','Drive 分頁回應重複，請重新讀取。');
+  if(pageToken)seen.add(pageToken);
+ }while(pageToken);
+ return files;
 }
 
 export async function createFolder(name,parentId=null){
@@ -99,7 +108,7 @@ export async function verifyFolder(id){
   if(file.mimeType!==FOLDER)throw new DriveError('input','指定的 ID 不是資料夾。');
   if(file.capabilities?.canAddChildren!==true)throw new DriveError('api','沒有權限在此資料夾新增文件。');
   return file;
- }catch(e){if(e.kind==='api'&&/回報 (403|404)/.test(e.message))throw new DriveError('api','無法存取此資料夾（403/404）。貼上連結不會授予 drive.file 權限；請選擇此應用建立的資料夾，或等待支援 Google Picker 授權。');throw e;}
+ }catch(e){if(e.kind==='api'&&/回報 (403|404)/.test(e.message))throw new DriveError('api','無法存取此資料夾（403/404）。請確認目前 Google 帳號擁有資料夾的編輯權限，並已允許 App 存取 Google Drive。');throw e;}
 }
 export async function uploadDayDoc(day,docBlob,folderId=null){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new DriveError('input','工作日格式無效。');

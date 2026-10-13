@@ -1,5 +1,5 @@
 import * as db from './db.js';
-import {authorize,hasToken,parseDriveId,uploadDayDoc,uploadOriginalPhoto,listSubfolders,createFolder,ensureDailyFolder} from './drive.js';
+import {authorize,hasToken,parseDriveId,uploadDayDoc,uploadOriginalPhoto,listSubfolders,verifyFolder,createFolder,ensureDailyFolder} from './drive.js';
 import {preparePhotoGroups,photoTableDocx,tablePlan,monitoringDocx} from './docx.js';
 import {
   MON_FIELDS,
@@ -913,15 +913,36 @@ $('photoDriveFolder')?.addEventListener('change',()=>{
 
 // Folder browser interactive logic
 let currentBrowsingFolderId=null;
+let browsingShared=false,folderHistory=[],folderRequest=0;
+async function selectDriveFolder(id,name){
+ try{
+  if(id)await verifyFolder(id);
+  $('photoDriveFolder').value=id||'';
+  try{safeGetLocalStorage()?.setItem(PHOTO_FOLDER_KEY,id||'');}catch{}
+  $('folderBrowserDialog').close();
+  $('photoDriveStatus').textContent=`已選擇目標資料夾：${name}`;
+ }catch(e){$('folderBrowserStatus').textContent='無法選取：'+e.message;}
+}
+async function showDriveFolder(id,name,shared=false,push=false){
+ if(push)folderHistory.push({id:currentBrowsingFolderId,name:$('folderBrowserCurrent').textContent,shared:browsingShared});
+ currentBrowsingFolderId=id;browsingShared=shared;
+ $('folderBrowserCurrent').textContent=name;
+ $('folderUp').disabled=!folderHistory.length;
+ $('folderSelectCurrent').disabled=shared;
+ $('createNewSubfolder').disabled=shared;
+ await refreshFolderList(id);
+}
 async function refreshFolderList(parentId){
+ const request=++folderRequest;const shared=browsingShared;
  const listEl=$('folderList'),statusEl=$('folderBrowserStatus');
  if(!listEl)return;
  listEl.replaceChildren();
  if(statusEl)statusEl.textContent='正在讀取資料夾清單…';
  try{
-  const folders=await listSubfolders(parentId);
+  const folders=await listSubfolders(parentId,{shared});
+  if(request!==folderRequest)return;
   if(!folders.length){
-   if(statusEl)statusEl.textContent='此資料夾內目前沒有子資料夾。';
+   if(statusEl)statusEl.textContent=shared?'目前帳號沒有可列出的共用資料夾；可貼上已獲授權的資料夾連結。':'此資料夾內目前沒有子資料夾；可選取目前資料夾或返回上層。';
    return;
   }
   for(const f of folders){
@@ -934,18 +955,18 @@ async function refreshFolderList(parentId){
    btn.type='button';
    btn.textContent='選取此資料夾';
    btn.style.cssText='min-height:36px;padding:4px 8px;font-size:0.85rem';
-   btn.onclick=()=>{
-    $('photoDriveFolder').value=f.id;
-    try{safeGetLocalStorage()?.setItem(PHOTO_FOLDER_KEY,f.id);}catch{}
-    $('folderBrowserDialog').close();
-    if($('photoDriveStatus'))$('photoDriveStatus').textContent=`已選擇目標資料夾：${f.name}`;
-   };
-   li.append(nameSpan,btn);
+   btn.disabled=f.capabilities?.canAddChildren!==true;
+   if(btn.disabled)btn.textContent='無新增權限';
+   btn.onclick=()=>selectDriveFolder(f.id,f.name);
+   const enter=document.createElement('button');
+   enter.type='button';enter.textContent='進入';
+   enter.onclick=()=>showDriveFolder(f.id,f.name,false,true);
+   li.append(nameSpan,enter,btn);
    listEl.append(li);
   }
-  if(statusEl)statusEl.textContent=`共找到 ${folders.length} 個子資料夾。點選「選取此資料夾」以設定。`;
+  if(statusEl)statusEl.textContent=`共找到 ${folders.length} 個資料夾。可進入子資料夾，或選取有新增權限的資料夾。`;
  }catch(e){
-  if(statusEl)statusEl.textContent='讀取失敗：'+e.message;
+  if(request===folderRequest&&statusEl)statusEl.textContent='讀取失敗：'+e.message;
  }
 }
 
@@ -967,17 +988,25 @@ $('browseDriveFolders')?.addEventListener('click',async()=>{
   if($('photoDriveStatus'))$('photoDriveStatus').textContent=e.message;
   return;
  }
- currentBrowsingFolderId=folderId;
+ folderHistory=[];
  $('folderBrowserDialog')?.showModal();
- const currentNameEl=$('folderBrowserCurrent');
- if(currentNameEl)currentNameEl.textContent=folderId?`母資料夾 ID：${folderId}`:'根目錄';
  if($('newSubfolderName'))$('newSubfolderName').value=activeDay||'';
  try{
   await authorize();
-  await refreshFolderList(currentBrowsingFolderId);
+  await showDriveFolder(folderId,folderId?`目標資料夾：${folderId}`:'我的雲端硬碟');
  }catch(e){
   if($('folderBrowserStatus'))$('folderBrowserStatus').textContent='授權失敗：'+e.message;
  }
+});
+
+$('folderMyDrive')?.addEventListener('click',()=>{folderHistory=[];showDriveFolder(null,'我的雲端硬碟');});
+$('folderShared')?.addEventListener('click',()=>{folderHistory=[];showDriveFolder(null,'與我共用',true);});
+$('folderUp')?.addEventListener('click',()=>{
+ const previous=folderHistory.pop();
+ if(previous)showDriveFolder(previous.id,previous.name,previous.shared);
+});
+$('folderSelectCurrent')?.addEventListener('click',()=>{
+ if(!browsingShared)selectDriveFolder(currentBrowsingFolderId,$('folderBrowserCurrent').textContent);
 });
 
 $('closeFolderBrowser')?.addEventListener('click',()=>{

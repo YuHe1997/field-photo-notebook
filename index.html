@@ -15,8 +15,14 @@
 </div>
 <dialog id="folderBrowserDialog" aria-labelledby="folderBrowserHeading" style="box-sizing:border-box;width:calc(100% - 24px);max-width:600px;max-height:80vh;padding:16px;border:1px solid #69877c;border-radius:12px;background:#f4f3ed;color:#19332f">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <h3 id="folderBrowserHeading" style="margin:0">選擇子資料夾</h3>
+    <h3 id="folderBrowserHeading" style="margin:0">選擇 Google Drive 資料夾</h3>
     <button id="closeFolderBrowser" type="button">關閉</button>
+  </div>
+  <div class="actions">
+    <button id="folderMyDrive" type="button">我的雲端硬碟</button>
+    <button id="folderShared" type="button">與我共用</button>
+    <button id="folderUp" type="button" disabled>返回上層</button>
+    <button id="folderSelectCurrent" type="button">選取目前資料夾</button>
   </div>
   <p id="folderBrowserCurrent" style="font-size:0.9rem;margin:4px 0"></p>
   <div style="display:flex;gap:8px;margin:8px 0">
