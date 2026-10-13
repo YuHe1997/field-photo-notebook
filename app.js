@@ -22,6 +22,7 @@ const $=id=>document.getElementById(id);
 let overlayErrorText=null;
 const say=s=>{
   $('status').textContent=s;
+  $('status').hidden=!/(失敗|未完成|無法|沒有|無可|不能|不支援|請先|請勿|請重試|尚未|原始影像未取得)/.test(s);
   if($('cameraOverlay')&&!$('cameraOverlay').hidden){
     overlayErrorText=s;
     if($('cameraOverlayStatus')){$('cameraOverlayStatus').textContent=s;$('cameraOverlayStatus').classList.add('is-notice');}
@@ -472,7 +473,7 @@ async function commitPending(){
   })().finally(()=>{commitPromise=null;});
   return commitPromise;
 }
-const retry=text('button','重試未完成照片儲存');retry.onclick=()=>run(commitPending);$('camera').append(retry);
+const retry=text('button','重試未完成照片儲存');retry.hidden=true;retry.onclick=()=>run(commitPending);$('camera').append(retry);
 if($('overlayRetry'))$('overlayRetry').onclick=()=>run(commitPending);
 if($('globalRetry'))$('globalRetry').onclick=()=>run(commitPending);
 function buttonReading(reading,time,limit){
@@ -900,7 +901,7 @@ $('exportMonDocx').onclick=async()=>{
 $('connectDrive').onclick=async()=>{
  $('connectDrive').disabled=true;
  try{await authorize();$('driveAccount').textContent='已取得 Google Drive 授權（僅本頁有效；過期時須重新授權）。';}
- catch(e){$('driveAccount').textContent='授權失敗：'+e.message;}
+ catch(e){$('driveAccount').textContent='授權失敗：'+e.message;$('driveStatus').textContent='授權失敗：'+e.message;}
  finally{$('connectDrive').disabled=false;}
 };
 
@@ -925,24 +926,35 @@ document.body.append($('folderBrowserDialog'));
 // One browser, with explicit and independent photo/document destinations.
 let folderDestination='photos';
 function folderTarget(){return folderDestination==='monitoring'
- ? {input:$('driveFolder'),status:$('driveStatus'),key:MONITORING_FOLDER_KEY}
- : {input:$('photoDriveFolder'),status:$('photoDriveStatus'),key:PHOTO_FOLDER_KEY};}
-let currentBrowsingFolderId=null;
+ ? {input:$('driveFolder'),path:$('monitoringDrivePath'),status:$('driveStatus'),key:MONITORING_FOLDER_KEY}
+ : {input:$('photoDriveFolder'),path:$('photoDrivePath'),status:$('photoDriveStatus'),key:PHOTO_FOLDER_KEY};}
+function savedFolderPath(key,id){
+ try{const stored=JSON.parse(safeGetLocalStorage()?.getItem(key+'-path')||'null');return stored?.id===id&&typeof stored.path==='string'?stored.path:'';}catch{return '';}
+}
+$('photoDrivePath').value=savedFolderPath(PHOTO_FOLDER_KEY,savedFolder)|| (savedFolder?'已儲存的資料夾（請重新選擇）':'');
+$('monitoringDrivePath').value=savedFolderPath(MONITORING_FOLDER_KEY,savedMonitoringFolder)|| (savedMonitoringFolder?'已儲存的資料夾（請重新選擇）':'');
+let currentBrowsingFolderId=null,currentBrowsingFolderName='';
 let browsingShared=false,browsingDriveId=null,browsingDriveList=false,folderHistory=[],folderRequest=0;
 async function selectDriveFolder(id,name){
  try{
   if(id)await verifyFolder(id);
   const target=folderTarget();
   target.input.value=id||'';
-  try{safeGetLocalStorage()?.setItem(target.key,id||'');}catch{}
+  const parts=folderHistory.map(p=>p.name);
+  parts.push(currentBrowsingFolderName);
+  if(id!==currentBrowsingFolderId)parts.push(name);
+  const path=parts.filter(Boolean).join(' / ');
+  target.path.value=path;
+  try{safeGetLocalStorage()?.setItem(target.key,id||'');safeGetLocalStorage()?.setItem(target.key+'-path',JSON.stringify({id:id||'',path}));}catch{}
   $('folderBrowserDialog').close();
-  target.status.textContent=`已選擇目標資料夾：${name}`;
+  target.status.textContent=`已選擇：${name}`;
  }catch(e){$('folderBrowserStatus').textContent='無法選取：'+e.message;}
 }
 async function showDriveFolder(id,name,shared=false,push=false,driveId=null,driveList=false){
- if(push)folderHistory.push({id:currentBrowsingFolderId,name:$('folderBrowserCurrent').textContent,shared:browsingShared,driveId:browsingDriveId,driveList:browsingDriveList});
+ if(push)folderHistory.push({id:currentBrowsingFolderId,name:currentBrowsingFolderName,shared:browsingShared,driveId:browsingDriveId,driveList:browsingDriveList});
  currentBrowsingFolderId=id;browsingShared=shared;browsingDriveId=driveId;browsingDriveList=driveList;
- $('folderBrowserCurrent').textContent=name;
+ currentBrowsingFolderName=name;
+ $('folderBrowserCurrent').textContent=[...folderHistory.map(p=>p.name),name].filter(Boolean).join(' / ');
  $('folderUp').disabled=!folderHistory.length;
  $('folderSelectCurrent').disabled=shared||driveList;
  $('createNewSubfolder').disabled=shared||driveList;
@@ -1014,7 +1026,12 @@ async function openDriveFolderBrowser(destination){
  if($('newSubfolderName'))$('newSubfolderName').value=displayedDay()||'';
  try{
   await authorize();
-  await showDriveFolder(folderId,folderId?`目標資料夾：${folderId}`:'我的雲端硬碟');
+  if(folderId){
+   const folder=await verifyFolder(folderId);
+   await showDriveFolder(folderId,savedFolderPath(target.key,folderId)||folder.name||'目標資料夾');
+  }else{
+   await showDriveFolder(null,'共用雲端硬碟',false,false,null,true);
+  }
  }catch(e){
   if($('folderBrowserStatus'))$('folderBrowserStatus').textContent='授權失敗：'+e.message;
  }
@@ -1030,7 +1047,7 @@ $('folderUp')?.addEventListener('click',()=>{
  if(previous)showDriveFolder(previous.id,previous.name,previous.shared,false,previous.driveId,previous.driveList);
 });
 $('folderSelectCurrent')?.addEventListener('click',()=>{
- if(!browsingShared&&!browsingDriveList)selectDriveFolder(currentBrowsingFolderId,$('folderBrowserCurrent').textContent);
+ if(!browsingShared&&!browsingDriveList)selectDriveFolder(currentBrowsingFolderId,currentBrowsingFolderName);
 });
 
 $('closeFolderBrowser')?.addEventListener('click',()=>{

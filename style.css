@@ -61,3 +61,17 @@ body.camera-overlay-active{overflow:hidden}
 #monForm label{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;font-size:0.95rem}
 #monForm input[type=text],#monForm textarea{box-sizing:border-box;width:100%;border:1px solid #7c9488;border-radius:6px;padding:8px;font-size:1rem;background:#fafaf8}
 #monStatus{font-weight:bold;color:#164c43;margin-top:8px}.mon-helper-buttons{display:flex;gap:8px;margin:6px 0;flex-wrap:wrap}.mon-helper-buttons button{min-height:42px;padding:6px 12px;font-size:0.9rem;border-radius:6px}.sync-notice{background:#fff3cd;border:1px solid #ffeeba;color:#856404;padding:8px 12px;border-radius:6px;margin:8px 0;font-size:0.9rem;line-height:1.4}#exportDialog::backdrop{background:#142c2aa8}.export-topbar{display:flex;align-items:center;justify-content:space-between;gap:8px;position:sticky;top:-16px;z-index:2;background:#f4f3ed;border-bottom:1px solid #b8c7be;padding:6px 0}.export-topbar h2{font-size:1.15rem;margin:0}.export-topbar button{flex-shrink:0}#exportRows{padding-left:24px}#exportRows li{border-bottom:1px solid #b8c7be;padding:10px 0;overflow-wrap:anywhere}#exportRows label{display:flex;align-items:center;gap:8px;margin:0;min-height:46px}#exportRows input[type=checkbox]{display:inline-block;width:24px;height:24px;flex-shrink:0;padding:0}#exportRows p{font-size:.9rem;white-space:pre-wrap;margin:4px 0}.docx-preview-table{width:100%;table-layout:fixed;border-collapse:collapse;background:white}.docx-preview-table td{width:50%;border:1px solid #555;padding:4px;vertical-align:middle;overflow-wrap:anywhere}.docx-preview-table img,.empty-export-photo{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:white}.docx-preview-table p{margin:0;min-height:1.4em;line-height:1.4;font-size:.9rem}#exportStatus{color:#793b10}
+/* User's simplified layout: normal document flow, not large drag translations. */
+header>h1{margin-bottom:8px}#tutorial{margin-bottom:12px}main>section>h2{margin-top:8px}
+.work-days{align-items:flex-end}.work-days #newDay{margin-bottom:14px}
+#status:empty,#photoDriveStatus:empty,#driveStatus:empty,#driveResult:empty{display:none}
+#photos .photo-compose-hint{margin:0 0 12px;color:#556a61}#photos>.actions{margin-top:8px}
+#photoDrivePath,#monitoringDrivePath{background:#edf1e8;color:#19332f;text-overflow:ellipsis;border:1px solid #7c9488;border-radius:6px}
+#driveExport{margin-bottom:12px}#driveExport .folder-path-label{margin:10px 0}
+.daily-folder-option{display:flex;align-items:center;gap:6px;font-size:.9rem}.daily-folder-option input{width:auto}
+.monitoring-template{margin:12px 0}.monitoring-export{margin-top:16px}
+.monitoring-export>button{flex:1;min-width:min(240px,100%)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+#folderList li{gap:8px;flex-wrap:wrap}#folderList li>span{flex:1;min-width:120px}
+#folderBrowserCurrent{overflow-wrap:anywhere}
+
