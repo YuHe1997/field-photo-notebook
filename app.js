@@ -875,14 +875,16 @@ $('fillMonTemplate').onclick = () => {
  updateMonStatusUI();
 };
 // The offline download and Drive export use the same committed snapshot preparation.
-async function prepareMonitoringDay(){
- const day=displayedDay(),formData=readMonInputs(),snapshot=await db.snapshot(),byId=new Map(snapshot.photos.map(p=>[p.id,p]));
+async function prepareMonitoringDay({day=displayedDay(),formData=readMonInputs()}={}){
+ const snapshot=await db.snapshot(),byId=new Map(snapshot.photos.map(p=>[p.id,p]));
  const included=snapshot.groups.filter(g=>g.workDay===day||g.photoIds.some(id=>byId.has(id)&&workDayOf(byId.get(id))===day)).sort((a,b)=>(a.createdAt??a.updatedAt??0)-(b.createdAt??b.updatedAt??0)||a.id.localeCompare(b.id));
  const prepared=included.length?await preparePhotoGroups(snapshot,included.map(g=>g.id)):[];
  return {day,docBlob:await monitoringDocx(formData,prepared)};
 }
 let monitoringWorking=false;
-function monitoringControls(){ $('exportMonDocx').disabled=$('uploadDrive').disabled=monitoringWorking; }
+function monitoringControls(){
+ for(const id of ['exportMonDocx','uploadDrive','browseMonitoringDriveFolders','driveFolder','monitoringAutoDailySubfolder'])$(id).disabled=monitoringWorking;
+}
 $('exportMonDocx').onclick=async()=>{
  if(monitoringWorking)return;monitoringWorking=true;monitoringControls();
  try{
@@ -911,16 +913,30 @@ $('photoDriveFolder')?.addEventListener('change',()=>{
  try{safeGetLocalStorage()?.setItem(PHOTO_FOLDER_KEY,$('photoDriveFolder').value.trim());}catch{}
 });
 
-// Folder browser interactive logic
+const MONITORING_FOLDER_KEY='field-monitoring-drive-folder-target';
+const savedMonitoringFolder=safeGetLocalStorage()?.getItem(MONITORING_FOLDER_KEY);
+if(savedMonitoringFolder)$('driveFolder').value=savedMonitoringFolder;
+$('driveFolder').addEventListener('change',()=>{
+ try{safeGetLocalStorage()?.setItem(MONITORING_FOLDER_KEY,$('driveFolder').value.trim());}catch{}
+});
+
+// Keep the shared modal outside hidden tab sections, so monitoring can open it too.
+document.body.append($('folderBrowserDialog'));
+// One browser, with explicit and independent photo/document destinations.
+let folderDestination='photos';
+function folderTarget(){return folderDestination==='monitoring'
+ ? {input:$('driveFolder'),status:$('driveStatus'),key:MONITORING_FOLDER_KEY}
+ : {input:$('photoDriveFolder'),status:$('photoDriveStatus'),key:PHOTO_FOLDER_KEY};}
 let currentBrowsingFolderId=null;
 let browsingShared=false,browsingDriveId=null,browsingDriveList=false,folderHistory=[],folderRequest=0;
 async function selectDriveFolder(id,name){
  try{
   if(id)await verifyFolder(id);
-  $('photoDriveFolder').value=id||'';
-  try{safeGetLocalStorage()?.setItem(PHOTO_FOLDER_KEY,id||'');}catch{}
+  const target=folderTarget();
+  target.input.value=id||'';
+  try{safeGetLocalStorage()?.setItem(target.key,id||'');}catch{}
   $('folderBrowserDialog').close();
-  $('photoDriveStatus').textContent=`已選擇目標資料夾：${name}`;
+  target.status.textContent=`已選擇目標資料夾：${name}`;
  }catch(e){$('folderBrowserStatus').textContent='無法選取：'+e.message;}
 }
 async function showDriveFolder(id,name,shared=false,push=false,driveId=null,driveList=false){
@@ -982,23 +998,29 @@ $('switchGoogleAccount')?.addEventListener('click',async()=>{
  }
 });
 
-$('browseDriveFolders')?.addEventListener('click',async()=>{
- const inputVal=$('photoDriveFolder').value.trim();
+async function openDriveFolderBrowser(destination){
+ if(destination==='monitoring'&&monitoringWorking)return;
+ folderDestination=destination;
+ const target=folderTarget();
+ const inputVal=target.input.value.trim();
  let folderId=null;
  try{folderId=parseDriveId(inputVal);}catch(e){
-  if($('photoDriveStatus'))$('photoDriveStatus').textContent=e.message;
+  target.status.textContent=e.message;
   return;
  }
  folderHistory=[];
+ $('folderBrowserHeading').textContent=destination==='monitoring'?'選擇監看紀錄表的 Drive 資料夾':'選擇照片的 Drive 資料夾';
  $('folderBrowserDialog')?.showModal();
- if($('newSubfolderName'))$('newSubfolderName').value=activeDay||'';
+ if($('newSubfolderName'))$('newSubfolderName').value=displayedDay()||'';
  try{
   await authorize();
   await showDriveFolder(folderId,folderId?`目標資料夾：${folderId}`:'我的雲端硬碟');
  }catch(e){
   if($('folderBrowserStatus'))$('folderBrowserStatus').textContent='授權失敗：'+e.message;
  }
-});
+}
+$('browseDriveFolders')?.addEventListener('click',()=>openDriveFolderBrowser('photos'));
+$('browseMonitoringDriveFolders')?.addEventListener('click',()=>openDriveFolderBrowser('monitoring'));
 
 $('folderMyDrive')?.addEventListener('click',()=>{folderHistory=[];showDriveFolder(null,'我的雲端硬碟');});
 $('folderShared')?.addEventListener('click',()=>{folderHistory=[];showDriveFolder(null,'與我共用',true);});
@@ -1024,10 +1046,7 @@ $('createNewSubfolder')?.addEventListener('click',async()=>{
  try{
   if($('folderBrowserStatus'))$('folderBrowserStatus').textContent=`正在建立「${name}」…`;
   const created=await createFolder(name,currentBrowsingFolderId);
-  if($('folderBrowserStatus'))$('folderBrowserStatus').textContent=`已建立資料夾：${created.name}！已自動為您選取。`;
-  $('photoDriveFolder').value=created.id;
-  try{safeGetLocalStorage()?.setItem(PHOTO_FOLDER_KEY,created.id);}catch{}
-  await refreshFolderList(currentBrowsingFolderId);
+  await selectDriveFolder(created.id,created.name);
  }catch(e){
   if($('folderBrowserStatus'))$('folderBrowserStatus').textContent='建立失敗：'+e.message;
  }finally{
@@ -1074,13 +1093,21 @@ $('uploadDrive').onclick=async()=>{
  if(monitoringWorking)return;
  let folderId;
  try{folderId=parseDriveId($('driveFolder').value);}catch(e){$('driveStatus').textContent=e.message;return;}
+ const batch={day:displayedDay(),formData:readMonInputs()};
+ const autoDaily=$('monitoringAutoDailySubfolder').checked;
  monitoringWorking=true;monitoringControls();$('driveResult').replaceChildren();
  try{
-  // Request consent in direct response to the user's tap, before expensive async generation.
+  // Freeze workday, form and destination before authorization yields.
   await authorize();$('driveAccount').textContent='已取得 Google Drive 授權（僅本頁有效）。';
-  $('driveStatus').textContent='正在本機生成當日文件並上傳；請勿重複點擊…';
-  const {day,docBlob}=await prepareMonitoringDay();
-  const file=await uploadDayDoc(day,docBlob,folderId);
+  let targetFolderId=folderId;
+  if(autoDaily&&folderId){
+   await verifyFolder(folderId);
+   $('driveStatus').textContent=`正在檢查/建立工作日 ${batch.day} 的子資料夾…`;
+   targetFolderId=(await ensureDailyFolder(folderId,batch.day)).id;
+  }
+  $('driveStatus').textContent=`正在生成 ${batch.day} 的監看紀錄表並上傳；請勿重複點擊…`;
+  const {day,docBlob}=await prepareMonitoringDay(batch);
+  const file=await uploadDayDoc(day,docBlob,targetFolderId);
   const link=document.createElement('a');link.href=file.webViewLink;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Open Google Doc（開啟 Google 文件）';
   $('driveResult').append(link);
   $('driveStatus').textContent=`已上傳 ${file.name||day} 並轉為 Google Doc。轉換可能改變版面，請開啟檢查。此操作不會同步本機資料。`;

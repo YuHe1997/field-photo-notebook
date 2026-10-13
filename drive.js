@@ -132,7 +132,7 @@ export async function uploadDayDoc(day,docBlob,folderId=null){
  const boundary=`fieldPhotoNotebook_${crypto.randomUUID().replaceAll('-','')}`;
  const meta={name:`施工監看紀錄-${day}`,mimeType:GOOGLE_DOC};if(folderId)meta.parents=[folderId];
  const body=new Blob([`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: ${DOCX}\r\n\r\n`,docBlob,`\r\n--${boundary}--\r\n`]);
- const file=await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,parents',{
+ const file=await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,parents&supportsAllDrives=true',{
   method:'POST',headers:{'Content-Type':`multipart/related; boundary=${boundary}`},body
  });
  if(!file.id||file.mimeType!==GOOGLE_DOC)throw new DriveError('api','Drive 未確認轉換成原生 Google Doc；請先檢查 Drive，避免重複上傳。');
