@@ -57,10 +57,103 @@ export function directionLabel(degrees){
   const sector=Math.floor((((degrees%360)+360)%360+22.5)/45)%8;
   return `${labels[(sector+4)%8]}向${labels[sector]}`;
 }
-export function headingSummary(h){
+export function headingSummary(h,bearing){
   const label=directionLabel(h?.degrees);
   if(!label)return '拍攝方向：未取得；鏡頭朝向未確認';
   const unreliable=h.accuracy<0||h.quality?.includes('不可靠');
   const fresh=h.freshnessAtAcquisitionCompleted??h.freshness??'新鮮度未知';
-  return `裝置參考推估：${label}；鏡頭朝向未確認；${unreliable?'平台回報不可靠；':''}${h.quality??'精度未保證'}；記錄時${fresh}（按鈕／取得讀值，非曝光方向）`;
+  const bearingStr=Number.isFinite(bearing?.degrees)?`；鏡頭朝向估計：${directionLabel(bearing.degrees)}（${bearing.degrees.toFixed(1)}°，${bearing.evidence||'推估'}）`:bearing?.evidence?`；鏡頭朝向未確認（${bearing.evidence}）`:'；鏡頭朝向未確認';
+  return `裝置參考推估：${label}${bearingStr}；${unreliable?'平台回報不可靠；':''}${h.quality??'精度未保證'}；記錄時${fresh}（按鈕／取得讀值，非曝光方向）`;
+}
+
+export function focusCapabilities(cap={},sup={}){
+  const pointsOfInterest=!!(sup?.pointsOfInterest&&cap?.pointsOfInterest);
+  const rawFocus=cap?.focusMode;
+  const focusModes=Array.isArray(rawFocus)?rawFocus:(typeof rawFocus==='string'?[rawFocus]:[]);
+  const rawExp=cap?.exposureMode;
+  const exposureModes=Array.isArray(rawExp)?rawExp:(typeof rawExp==='string'?[rawExp]:[]);
+  const canPointFocus=pointsOfInterest;
+  const canPointExposure=false;
+  let summary='硬體不支援點對焦座標，維持自動模式';
+  if(canPointFocus)summary='支援點對焦區域設定（無獨立點曝光座標）';
+  return {
+    pointsOfInterest,
+    focusModes,
+    exposureModes,
+    exposureCompensation:cap?.exposureCompensation??null,
+    canPointFocus,
+    canPointExposure,
+    summary
+  };
+}
+
+export function mapPreviewTapToSensor(tapX,tapY,previewWidth,previewHeight,videoWidth,videoHeight,zoomMode='unknown',zoomFactor=1){
+  if(!Number.isFinite(tapX)||!Number.isFinite(tapY)||!Number.isFinite(previewWidth)||!Number.isFinite(previewHeight)||previewWidth<=0||previewHeight<=0)
+    return {inBounds:false,reason:'預覽尺寸無效'};
+  if(!Number.isFinite(videoWidth)||!Number.isFinite(videoHeight)||videoWidth<=0||videoHeight<=0)
+    return {inBounds:false,reason:'鏡頭影像尺寸尚未就緒'};
+  const videoAspect=videoWidth/videoHeight;
+  const previewAspect=previewWidth/previewHeight;
+  let vw,vh,vx,vy;
+  if(previewAspect>videoAspect){
+    vh=previewHeight;
+    vw=previewHeight*videoAspect;
+    vx=(previewWidth-vw)/2;
+    vy=0;
+  }else{
+    vw=previewWidth;
+    vh=previewWidth/videoAspect;
+    vx=0;
+    vy=(previewHeight-vh)/2;
+  }
+  if(tapX<vx||tapX>vx+vw||tapY<vy||tapY>vy+vh)
+    return {inBounds:false,reason:'點按位置在黑邊（letterbox）區域，請點按鏡頭影像區域'};
+  const nx=(tapX-vx)/vw;
+  const ny=(tapY-vy)/vh;
+  const factor=Number.isFinite(zoomFactor)&&zoomFactor>=1?zoomFactor:1;
+  let sensorX,sensorY;
+  if(zoomMode==='browser-digital-crop'&&factor>1){
+    sensorX=(1-1/factor)/2+nx/factor;
+    sensorY=(1-1/factor)/2+ny/factor;
+  }else{
+    sensorX=nx;
+    sensorY=ny;
+  }
+  sensorX=Math.max(0,Math.min(1,Number(sensorX.toFixed(6))));
+  sensorY=Math.max(0,Math.min(1,Number(sensorY.toFixed(6))));
+  return {inBounds:true,sensorX,sensorY,previewX:tapX,previewY:tapY};
+}
+
+export function deriveCameraBearing({alpha,beta,gamma,source,absolute,accuracy,quality,facingMode='environment',screenAngle=0,readingAt=null,now=Date.now()}={}){
+  if(readingAt!==null&&Number.isFinite(readingAt)&&now-readingAt>2000)
+    return {degrees:null,label:null,algorithm:null,reason:'方位讀值已過期（無即時姿態）'};
+  if(facingMode!=='environment')return {degrees:null,label:null,algorithm:null,reason:'僅後鏡頭（environment）支援鏡頭朝向估計；目前鏡頭：'+(facingMode||'未知')};
+  if(source==='webkitCompassHeading')return {degrees:null,label:null,algorithm:null,reason:'Safari webkitCompassHeading 未提供 3D 姿態矩陣，禁用鏡頭朝向估計'};
+  if(absolute!==true)return {degrees:null,label:null,algorithm:null,reason:'感測器僅提供相對旋轉，非絕對方位'};
+  if(!Number.isFinite(alpha)||!Number.isFinite(beta)||!Number.isFinite(gamma))return {degrees:null,label:null,algorithm:null,reason:'姿態角度缺值或非數值'};
+  if(Number.isFinite(accuracy)&&accuracy<0)return {degrees:null,label:null,algorithm:null,reason:'平台回報精度不可靠（負值）'};
+  
+  const a=alpha*Math.PI/180,b=beta*Math.PI/180,g=gamma*Math.PI/180;
+  const sinA=Math.sin(a),cosA=Math.cos(a);
+  const sinB=Math.sin(b),cosB=Math.cos(b);
+  const sinG=Math.sin(g),cosG=Math.cos(g);
+  
+  const ve = -cosA*sinG - sinA*sinB*cosG;
+  const vn = -sinA*sinG + cosA*sinB*cosG;
+  const vu = -cosB*cosG;
+  
+  const L = Math.hypot(ve,vn);
+  if(L < 0.25)return {degrees:null,label:null,algorithm:null,reason:'退化：鏡頭朝向天頂或地底（垂直投影無效）'};
+  
+  let deg = Math.atan2(ve, vn) * 180 / Math.PI;
+  deg = (deg % 360 + 360) % 360;
+  deg = Number(deg.toFixed(1));
+  
+  return {
+    degrees: deg,
+    label: directionLabel(deg),
+    algorithm: 'w3c-optical-axis-v1',
+    evidence: `後鏡頭光學軸 3D 投影（α=${alpha.toFixed(1)}°, β=${beta.toFixed(1)}°, γ=${gamma.toFixed(1)}°）`,
+    horizontalStrength: Number(L.toFixed(3))
+  };
 }

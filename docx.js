@@ -16,13 +16,27 @@ const pProps=keep=>`<w:pPr><w:spacing w:before="0" w:after="0"/>${keep?'<w:keepN
 function descriptionParagraph(s){return `<w:p>${pProps(false)}<w:r><w:rPr><w:rFonts w:ascii="Noto Sans CJK TC" w:hAnsi="Noto Sans CJK TC" w:eastAsia="Noto Sans CJK TC"/><w:sz w:val="22"/><w:lang w:val="zh-TW" w:eastAsia="zh-TW"/></w:rPr>${s.replace(/\r\n?/g,'\n').split('\n').map(line=>line.split('\t').map(part=>`<w:t xml:space="preserve">${xmlText(part)}</w:t>`).join('<w:tab/>')).join('<w:br/>')}</w:r></w:p>`;}
 // Width matches the reference's A4 usable width, without copying its private content.
 const TABLE_WIDTH=8306,CELL_WIDTH=4153,IMAGE_WIDTH=4009,IMAGE_HEIGHT=3007;
-export const MON_GRID=[4814,4814],MON_TABLE_WIDTH=9628;
-function monCell(spans,text,align='left',color='000000'){
+export const MON_GRID=[4824,4804],MON_TABLE_WIDTH=9628;
+export function splitLabeledField(label,rawText){
+ let text=(rawText||'').replace(/\r\n?/g,'\n');
+ const normalizedLabel=label.replace(/\s*[：:]\s*$/,'');
+ const escaped=normalizedLabel.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+ const prefixRegex=new RegExp('^[ \\t]*'+escaped+'(?:[ \\t]*[:：][ \\t]*\\n?|[ \\t]*(?:\\n|$))');
+ while(prefixRegex.test(text)){
+  text=text.replace(prefixRegex,'');
+ }
+ return text.length?[label,text]:[label];
+}
+function monCell(spans,paragraphs,align='left',color='000000'){
  const spanAttr=spans>1?`<w:gridSpan w:val="${spans}"/>`:'';
  const jcAttr=align!=='left'?`<w:jc w:val="${align}"/>`:'';
  const colorAttr=color!=='000000'?`<w:color w:val="${color}"/>`:'<w:color w:val="000000"/>';
- const lines=text.replace(/\r\n?/g,'\n').split('\n').map(l=>l.split('\t').map(p=>`<w:t xml:space="preserve">${xmlText(p)}</w:t>`).join('<w:tab/>')).join('<w:br/>');
- return `<w:tc><w:tcPr>${spanAttr}</w:tcPr><w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="276" w:lineRule="auto"/>${jcAttr}<w:rPr><w:rFonts w:ascii="DFKai-SB" w:hAnsi="DFKai-SB" w:eastAsia="DFKai-SB" w:cs="DFKai-SB"/><w:sz w:val="24"/><w:szCs w:val="24"/>${colorAttr}<w:lang w:val="zh-TW" w:eastAsia="zh-TW"/></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="DFKai-SB" w:hAnsi="DFKai-SB" w:eastAsia="DFKai-SB" w:cs="DFKai-SB"/><w:sz w:val="24"/><w:szCs w:val="24"/>${colorAttr}<w:lang w:val="zh-TW" w:eastAsia="zh-TW"/></w:rPr>${lines}</w:r></w:p></w:tc>`;
+ const items=Array.isArray(paragraphs)?paragraphs:[paragraphs];
+ const pEls=items.map(text=>{
+  const lines=text.replace(/\r\n?/g,'\n').split('\n').map(l=>l.split('\t').map(p=>`<w:t xml:space="preserve">${xmlText(p)}</w:t>`).join('<w:tab/>')).join('<w:br/>');
+  return `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="276" w:lineRule="auto"/>${jcAttr}<w:rPr><w:rFonts w:ascii="DFKai-SB" w:hAnsi="DFKai-SB" w:eastAsia="DFKai-SB" w:cs="DFKai-SB"/><w:sz w:val="24"/><w:szCs w:val="24"/>${colorAttr}<w:lang w:val="zh-TW" w:eastAsia="zh-TW"/></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="DFKai-SB" w:hAnsi="DFKai-SB" w:eastAsia="DFKai-SB" w:cs="DFKai-SB"/><w:sz w:val="24"/><w:szCs w:val="24"/>${colorAttr}<w:lang w:val="zh-TW" w:eastAsia="zh-TW"/></w:rPr>${lines}</w:r></w:p>`;
+ }).join('');
+ return `<w:tc><w:tcPr>${spanAttr}</w:tcPr>${pEls}</w:tc>`;
 }
 function monRow(cells,height=20){return `<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="${height}" w:hRule="atLeast"/></w:trPr>${cells.join('')}</w:tr>`;}
 export function monitoringPlan(formData,groups){
@@ -38,8 +52,8 @@ export async function monitoringDocx(formData,groups){
   monRow([monCell(1,`工程名稱：${f.projectName||''}`),monCell(1,`日期： ${f.date||''}`)],20),
   monRow([monCell(1,`施工地點：${f.constructionLocation||''}`),monCell(1,`考古遺址：${f.siteName||''}`)],20),
   monRow([monCell(2,`監看人數：${f.watcherCount||''}`)],20),
-  monRow([monCell(2,`作業項目、範圍與深度：${f.workScope||''}`)],1673),
-  monRow([monCell(1,`地層堆積 : ${f.strataSummary||''}`),monCell(1,f.strataDesc||'')],1673),
+  monRow([monCell(2,splitLabeledField('作業項目、範圍與深度：',f.workScope))],1673),
+  monRow([monCell(1,splitLabeledField('地層堆積：',f.strataSummary)),monCell(1,f.strataDesc||'')],1673),
   monRow([monCell(1,`文化遺物：${f.culturalArtifacts||''}`),monCell(1,`文化遺跡：${f.culturalFeatures||''}`)],212),
   monRow([monCell(1,`其他重要紀事：${f.otherEvents||''}`),monCell(1,`文資處置建議：${f.dispositionAdvice||''}`)],56),
   monRow([monCell(2,'相關圖示或照片','center','ee0000')],56)
@@ -69,7 +83,7 @@ export async function monitoringDocx(formData,groups){
  const allRows=[...headerRows,...photoRows].join('');
  const documentXML=xmlHeader+`<w:document xmlns:w="${W}" xmlns:r="${officeRel}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body><w:tbl><w:tblPr><w:tblW w:w="${MON_TABLE_WIDTH}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders>${border}</w:tblBorders><w:tblCellMar><w:top w:w="72" w:type="dxa"/><w:bottom w:w="72" w:type="dxa"/><w:left w:w="72" w:type="dxa"/><w:right w:w="72" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${gridCols}</w:tblGrid>${allRows}</w:tbl><w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr><w:r><w:rPr><w:sz w:val="2"/></w:rPr></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="851" w:bottom="851" w:left="1134" w:right="1134" w:header="851" w:footer="366"/></w:sectPr></w:body></w:document>`;
  const stylesXML=xmlHeader+`<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="DFKai-SB" w:hAnsi="DFKai-SB" w:eastAsia="DFKai-SB" w:cs="DFKai-SB"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="zh-TW" w:eastAsia="zh-TW"/></w:rPr></w:rPrDefault><w:pPrDefault>${pProps(false)}</w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`;
- const contentTypes=xmlHeader+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>';
+ const contentTypes=xmlHeader+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/></Types>';
  relations.push(`<Relationship Id="fontTable" Type="${officeRel}/fontTable" Target="fontTable.xml"/>`);
  const fontTableXML=xmlHeader+`<w:fonts xmlns:w="${W}"><w:font w:name="DFKai-SB"><w:altName w:val="標楷體"/><w:charset w:val="88"/></w:font><w:font w:name="Times New Roman"><w:charset w:val="00"/></w:font></w:fonts>`;
  return zipStore([['[Content_Types].xml',new Blob([contentTypes])],['_rels/.rels',new Blob([xmlHeader+`<Relationships xmlns="${relNS}"><Relationship Id="document" Type="${officeRel}/officeDocument" Target="word/document.xml"/></Relationships>`])],['word/document.xml',new Blob([documentXML])],['word/styles.xml',new Blob([stylesXML])],['word/fontTable.xml',new Blob([fontTableXML])],['word/_rels/document.xml.rels',new Blob([xmlHeader+`<Relationships xmlns="${relNS}">${relations.join('')}</Relationships>`])],...media]);
@@ -79,7 +93,7 @@ export async function photoTableDocx(groups){const plan=tablePlan(groups),media=
  const border=['top','left','bottom','right','insideH','insideV'].map(edge=>`<w:${edge} w:val="single" w:sz="4" w:color="000000"/>`).join('');
  const documentXML=xmlHeader+`<w:document xmlns:w="${W}" xmlns:r="${officeRel}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body><w:tbl><w:tblPr><w:tblW w:w="${TABLE_WIDTH}" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders>${border}</w:tblBorders><w:tblCellMar><w:top w:w="72" w:type="dxa"/><w:bottom w:w="72" w:type="dxa"/><w:left w:w="72" w:type="dxa"/><w:right w:w="72" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="${CELL_WIDTH}"/><w:gridCol w:w="${CELL_WIDTH}"/></w:tblGrid>${rows}</w:tbl><w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/></w:pPr><w:r><w:rPr><w:sz w:val="2"/></w:rPr></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="709" w:bottom="709" w:left="1800" w:right="1800" w:header="0" w:footer="0"/></w:sectPr></w:body></w:document>`;
  const stylesXML=xmlHeader+`<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="DFKai-SB" w:hAnsi="DFKai-SB" w:eastAsia="DFKai-SB" w:cs="DFKai-SB"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="zh-TW" w:eastAsia="zh-TW"/></w:rPr></w:rPrDefault><w:pPrDefault>${pProps(false)}</w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`;
- const contentTypes=xmlHeader+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>';
+ const contentTypes=xmlHeader+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/></Types>';
  relations.push(`<Relationship Id="fontTable" Type="${officeRel}/fontTable" Target="fontTable.xml"/>`);
  const fontTableXML=xmlHeader+`<w:fonts xmlns:w="${W}"><w:font w:name="DFKai-SB"><w:altName w:val="標楷體"/><w:charset w:val="88"/></w:font><w:font w:name="Times New Roman"><w:charset w:val="00"/></w:font></w:fonts>`;
  return zipStore([['[Content_Types].xml',new Blob([contentTypes])],['_rels/.rels',new Blob([xmlHeader+`<Relationships xmlns="${relNS}"><Relationship Id="document" Type="${officeRel}/officeDocument" Target="word/document.xml"/></Relationships>`])],['word/document.xml',new Blob([documentXML])],['word/styles.xml',new Blob([stylesXML])],['word/fontTable.xml',new Blob([fontTableXML])],['word/_rels/document.xml.rels',new Blob([xmlHeader+`<Relationships xmlns="${relNS}">${relations.join('')}</Relationships>`])],...media]);}

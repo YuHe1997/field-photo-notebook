@@ -65,8 +65,35 @@ async function api(url,options={}){
  }
  try{return await response.json();}catch{throw new DriveError('api','Google API 回應格式不正確；請先檢查 Drive 再重試。');}
 }
+export async function listSubfolders(parentId){
+ const q=parentId
+  ? `'${parentId}' in parents and mimeType = '${FOLDER}' and trashed = false`
+  : `'root' in parents and mimeType = '${FOLDER}' and trashed = false`;
+ const data=await api(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,capabilities(canAddChildren))&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+ return data.files||[];
+}
+
+export async function createFolder(name,parentId=null){
+ if(!name||!name.trim())throw new DriveError('input','資料夾名稱不可為空');
+ const meta={name:name.trim(),mimeType:FOLDER};
+ if(parentId)meta.parents=[parentId];
+ const res=await api('https://www.googleapis.com/drive/v3/files?fields=id,name,mimeType&supportsAllDrives=true',{
+  method:'POST',
+  headers:{'Content-Type':'application/json; charset=UTF-8'},
+  body:JSON.stringify(meta)
+ });
+ return res;
+}
+
+export async function ensureDailyFolder(parentId,day){
+ const folderName=day;
+ const existing=await listSubfolders(parentId);
+ const found=existing.find(f=>f.name===folderName);
+ if(found)return found;
+ return await createFolder(folderName,parentId);
+}
+
 export async function verifyFolder(id){
- if(!id)return null;
  try{
   const file=await api(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?fields=id,mimeType,name,capabilities(canAddChildren)&supportsAllDrives=true`);
   if(file.mimeType!==FOLDER)throw new DriveError('input','指定的 ID 不是資料夾。');
@@ -86,3 +113,39 @@ export async function uploadDayDoc(day,docBlob,folderId=null){
  if(!file.id||file.mimeType!==GOOGLE_DOC)throw new DriveError('api','Drive 未確認轉換成原生 Google Doc；請先檢查 Drive，避免重複上傳。');
  return {...file,webViewLink:file.webViewLink||`https://docs.google.com/document/d/${encodeURIComponent(file.id)}/edit`};
 }
+
+export function formatPhotoFileName(photo){
+ const day=photo.workDay||'unknown-day';
+ const num=Number.isSafeInteger(photo.photoNumber)?String(photo.photoNumber).padStart(3,'0'):'000';
+ const uuidPart=(photo.id||'').split('-')[0]||crypto.randomUUID().slice(0,8);
+ const ext=photo.mime==='image/png'?'.png':photo.mime==='image/webp'?'.webp':'.jpg';
+ return `${day}_${num}_${uuidPart}${ext}`;
+}
+
+export async function uploadOriginalPhoto(photo,blob,folderId=null,onProgress=null){
+ if(!blob)throw new DriveError('input','缺少原始影像檔案');
+ if(folderId)await verifyFolder(folderId);
+ const fileName=formatPhotoFileName(photo);
+ const boundary=`fieldPhotoNotebook_${crypto.randomUUID().replaceAll('-','')}`;
+ const meta={
+  name:fileName,
+  mimeType:photo.mime||blob.type||'image/jpeg',
+  appProperties:{
+   photoId:photo.id,
+   workDay:photo.workDay||'',
+   photoNumber:String(photo.photoNumber||'')
+  }
+ };
+ if(folderId)meta.parents=[folderId];
+ const body=new Blob([
+  `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: ${meta.mimeType}\r\n\r\n`,
+  blob,
+  `\r\n--${boundary}--\r\n`
+ ]);
+ const res=await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,parents&supportsAllDrives=true',{
+  method:'POST',headers:{'Content-Type':`multipart/related; boundary=${boundary}`},body
+ });
+ if(!res.id)throw new DriveError('api','Drive 上傳未確認成功；請檢查 Drive。');
+ return res;
+}
+
