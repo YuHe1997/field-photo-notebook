@@ -77,5 +77,12 @@ header>h1{margin-bottom:8px}#tutorial{margin-bottom:12px}main>section>h2{margin-
 #unifiedExport{margin-top:20px;border-top:1px solid #b8c7be;padding-top:8px}
 #unifiedExport>section{margin-top:16px;padding-top:8px}#unifiedExport h4{margin:8px 0}
 #photoDriveExport{border-top:1px solid #b8c7be}#photoDriveExport>button:last-of-type{width:100%}
+.app-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.app-title-row h1{margin:8px 0}
+#homeScreenHelp{font-size:.85rem;min-height:40px;padding:6px 10px;background:transparent;color:white;border-color:#8aa99d}
+#homeScreenDialog{box-sizing:border-box;width:calc(100% - 24px);max-width:560px;max-height:85dvh;overflow:auto;padding:16px;border:1px solid #69877c;border-radius:12px;background:#f4f3ed;color:#19332f}
+#homeScreenDialog::backdrop{background:#142c2aa8}.home-screen-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.home-screen-heading h2{font-size:1.15rem;margin:0}
+.home-screen-storage-note{padding:12px;border-radius:8px;background:#fff3d6;margin:12px 0;font-size:.9rem}.home-screen-storage-note p{margin:6px 0}
+#homeScreenInstructions,#homeScreenStatus{overflow-wrap:anywhere}#homeScreenUrl{border:1px solid #7c9488;border-radius:6px}#installHomeScreen{background:#164c43;color:white;width:100%}
+
 
 

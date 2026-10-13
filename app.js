@@ -1147,4 +1147,57 @@ window.addEventListener('storage',e=>{
     }
   }
 });
+// Home-screen access: guidance on iOS; a native prompt only when the browser offers it.
+let homeScreenPrompt=null,homeScreenInstalled=false;
+const homeScreenMode=window.matchMedia('(display-mode: standalone)');
+const homeScreenIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const homeScreenAndroid=/Android/.test(navigator.userAgent);
+const homeScreenEmbedded=/Line\/|\bLINE\b|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent);
+function updateHomeScreenUI(){
+ const installed=homeScreenInstalled||homeScreenMode.matches||navigator.standalone===true;
+ $('homeScreenHelp').hidden=installed;
+ $('installHomeScreen').hidden=installed||homeScreenIOS||homeScreenEmbedded||!homeScreenPrompt;
+ $('homeScreenInstructions').textContent=homeScreenEmbedded
+  ? '請先複製網址，用 iPhone 的 Safari 或 Android 的 Chrome 開啟；不要在 LINE 等內建瀏覽器內加入。'
+  :homeScreenIOS
+   ? '在 Safari 點「分享」→「加入主畫面」。若有「作為網頁 App 打開」，可開啟後按「加入」。分享按鈕的位置依 iOS 版本不同；網站不能替你按下加入。'
+   :homeScreenPrompt
+    ? '點下方「安裝至主畫面」，再於瀏覽器的確認視窗選擇安裝。'
+    :homeScreenAndroid
+     ? '在 Chrome 的 ⋮ 選單選「安裝應用程式」或「加入主畫面」（名稱依版本不同）。沒有安裝按鈕時，也可由這個選單加入捷徑。'
+     : '手機請用 Safari／Chrome 開啟此網址，從分享／選單加入主畫面。電腦 Chrome 可使用網址列的安裝圖示或選單中的安裝功能。';
+}
+window.addEventListener('beforeinstallprompt',event=>{
+ event.preventDefault();homeScreenPrompt=event;updateHomeScreenUI();
+});
+window.addEventListener('appinstalled',()=>{
+ homeScreenInstalled=true;homeScreenPrompt=null;updateHomeScreenUI();
+ $('homeScreenStatus').textContent='瀏覽器回報已安裝。請從主畫面圖示開啟，並確認原有資料。';
+});
+homeScreenMode.addEventListener?.('change',updateHomeScreenUI);
+$('homeScreenUrl').value=new URL('./',document.baseURI).href;
+$('homeScreenHelp').onclick=()=>{updateHomeScreenUI();$('homeScreenStatus').textContent='';$('homeScreenDialog').showModal();};
+$('closeHomeScreen').onclick=()=>$('homeScreenDialog').close();
+$('homeScreenBackup').onclick=()=>$('backup').click();
+$('homeScreenMonitoring').onclick=()=>{$('homeScreenDialog').close();tab('monitoring');$('exportMonDocx').scrollIntoView({block:'center'});};
+$('copyHomeScreenUrl').onclick=async()=>{
+ try{
+  if(!navigator.clipboard?.writeText)throw Error('clipboard unavailable');
+  await navigator.clipboard.writeText($('homeScreenUrl').value);
+  $('homeScreenStatus').textContent='網址已複製。';
+ }catch{$('homeScreenUrl').focus();$('homeScreenUrl').select();$('homeScreenStatus').textContent='無法自動複製，請長按／選取上方網址手動複製。';}
+};
+$('installHomeScreen').onclick=async()=>{
+ const prompt=homeScreenPrompt;if(!prompt)return;
+ homeScreenPrompt=null;$('installHomeScreen').disabled=true;
+ try{
+  await prompt.prompt();
+  const choice=await prompt.userChoice;
+  $('homeScreenStatus').textContent=choice?.outcome==='accepted'
+   ? '已送出安裝確認；請等待瀏覽器完成，並從主畫面確認圖示與資料。'
+   : '未安裝，資料沒有變更；之後仍可從瀏覽器選單加入主畫面。';
+ }catch{$('homeScreenStatus').textContent='瀏覽器未能開啟安裝視窗；請從分享／選單加入主畫面。';}
+ finally{$('installHomeScreen').disabled=false;updateHomeScreenUI();}
+};
+updateHomeScreenUI();
 if('serviceWorker' in navigator&&isSecureContext)run(async()=>{await navigator.serviceWorker.register('./sw.js',{scope:'./'});await navigator.serviceWorker.ready;const update=()=>{$('offline').textContent=navigator.serviceWorker.controller?'離線殼已受控制；照片只存 IndexedDB，仍需備份。':'離線殼已安裝，重新載入後確認控制。';};update();navigator.serviceWorker.addEventListener('controllerchange',update);});
