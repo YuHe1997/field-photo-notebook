@@ -65,7 +65,19 @@ async function api(url,options={}){
  }
  try{return await response.json();}catch{throw new DriveError('api','Google API 回應格式不正確；請先檢查 Drive 再重試。');}
 }
-export async function listSubfolders(parentId,{shared=false}={}){
+export async function listSharedDrives(){
+ const drives=[];let pageToken;const seen=new Set();
+ do{
+  const params=new URLSearchParams({pageSize:'100',fields:'nextPageToken,drives(id,name)'});
+  if(pageToken)params.set('pageToken',pageToken);
+  const data=await api(`https://www.googleapis.com/drive/v3/drives?${params}`);
+  drives.push(...(data.drives||[]));pageToken=data.nextPageToken;
+  if(pageToken&&seen.has(pageToken))throw new DriveError('api','共用雲端硬碟分頁回應重複，請重新讀取。');
+  if(pageToken)seen.add(pageToken);
+ }while(pageToken);
+ return drives.sort((a,b)=>a.name.localeCompare(b.name));
+}
+export async function listSubfolders(parentId,{shared=false,driveId=null}={}){
  const parent=parentId||'root';
  if(!/^[\w-]+$/.test(parent))throw new DriveError('input','資料夾 ID 格式無效。');
  const location=shared?'sharedWithMe = true':`'${parent}' in parents`;
@@ -73,6 +85,10 @@ export async function listSubfolders(parentId,{shared=false}={}){
  const files=[];let pageToken;const seen=new Set();
  do{
   const params=new URLSearchParams({q,fields:'nextPageToken,files(id,name,capabilities(canAddChildren))',pageSize:'100',orderBy:'name',supportsAllDrives:'true',includeItemsFromAllDrives:'true'});
+  if(driveId){
+   if(!/^[\w-]+$/.test(driveId))throw new DriveError('input','共用雲端硬碟 ID 格式無效。');
+   params.set('corpora','drive');params.set('driveId',driveId);
+  }
   if(pageToken)params.set('pageToken',pageToken);
   const data=await api(`https://www.googleapis.com/drive/v3/files?${params}`);
   files.push(...(data.files||[]));pageToken=data.nextPageToken;
