@@ -74,4 +74,8 @@ header>h1{margin-bottom:8px}#tutorial{margin-bottom:12px}main>section>h2{margin-
 .sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 #folderList li{gap:8px;flex-wrap:wrap}#folderList li>span{flex:1;min-width:120px}
 #folderBrowserCurrent{overflow-wrap:anywhere}
+#unifiedExport{margin-top:20px;border-top:1px solid #b8c7be;padding-top:8px}
+#unifiedExport>section{margin-top:16px;padding-top:8px}#unifiedExport h4{margin:8px 0}
+#photoDriveExport{border-top:1px solid #b8c7be}#photoDriveExport>button:last-of-type{width:100%}
+
 

@@ -884,10 +884,11 @@ async function prepareMonitoringDay({day=displayedDay(),formData=readMonInputs()
 }
 let monitoringWorking=false;
 function monitoringControls(){
- for(const id of ['exportMonDocx','uploadDrive','browseMonitoringDriveFolders','driveFolder','monitoringAutoDailySubfolder'])$(id).disabled=monitoringWorking;
+ const busy=monitoringWorking||uploadingPhotos;
+ for(const id of ['exportMonDocx','uploadDrive','uploadPhotosToDrive','browseMonitoringDriveFolders','browseDriveFolders','driveFolder','photoDriveFolder','monitoringAutoDailySubfolder','autoDailySubfolder','connectDrive','switchGoogleAccount'])$(id).disabled=busy;
 }
 $('exportMonDocx').onclick=async()=>{
- if(monitoringWorking)return;monitoringWorking=true;monitoringControls();
+ if(monitoringWorking||uploadingPhotos)return;monitoringWorking=true;monitoringControls();
  try{
   $('monStatus').textContent='正在處理照片並生成完整 Word 監看紀錄…';
   const {day,docBlob}=await prepareMonitoringDay();
@@ -902,7 +903,7 @@ $('connectDrive').onclick=async()=>{
  $('connectDrive').disabled=true;
  try{await authorize();$('driveAccount').textContent='已取得 Google Drive 授權（僅本頁有效；過期時須重新授權）。';}
  catch(e){$('driveAccount').textContent='授權失敗：'+e.message;$('driveStatus').textContent='授權失敗：'+e.message;}
- finally{$('connectDrive').disabled=false;}
+ finally{monitoringControls();}
 };
 
 let uploadingPhotos=false;
@@ -1011,7 +1012,7 @@ $('switchGoogleAccount')?.addEventListener('click',async()=>{
 });
 
 async function openDriveFolderBrowser(destination){
- if(destination==='monitoring'&&monitoringWorking)return;
+ if(monitoringWorking||uploadingPhotos)return;
  folderDestination=destination;
  const target=folderTarget();
  const inputVal=target.input.value.trim();
@@ -1072,42 +1073,41 @@ $('createNewSubfolder')?.addEventListener('click',async()=>{
 });
 
 $('uploadPhotosToDrive')?.addEventListener('click',async()=>{
- if(uploadingPhotos)return;
+ if(uploadingPhotos||monitoringWorking)return;
  const statusEl=$('photoDriveStatus');
  let folderId=null;
  try{folderId=parseDriveId($('photoDriveFolder').value);}catch(e){if(statusEl)statusEl.textContent=e.message;return;}
- const targets=dayPhotos().filter(p=>p.source==='camera');
- const uploadList=selected.size?targets.filter(p=>selected.has(p.id)):targets;
+ const batchDay=displayedDay();
+ const autoDaily=$('autoDailySubfolder').checked;
+ const uploadList=photos.filter(p=>workDayOf(p)===batchDay&&p.source==='camera').map(p=>({photo:p,original:assets.find(a=>a.id===p.id)?.original}));
  if(!uploadList.length){if(statusEl)statusEl.textContent='目前工作日沒有可上傳的相機照片。';return;}
- uploadingPhotos=true;$('uploadPhotosToDrive').disabled=true;
+ if(uploadList.some(item=>!item.original)){if(statusEl)statusEl.textContent='原始照片缺失，未開始上傳。請先檢查本機資料。';return;}
+ uploadingPhotos=true;monitoringControls();
  try{
   await authorize();
   let targetFolderId=folderId;
-  const autoDaily=$('autoDailySubfolder')?.checked;
   if(autoDaily&&targetFolderId){
-   if(statusEl)statusEl.textContent=`正在檢查/建立工作日 (${activeDay}) 子資料夾…`;
-   const dailyFolder=await ensureDailyFolder(targetFolderId,activeDay);
+   if(statusEl)statusEl.textContent=`正在檢查/建立工作日 (${batchDay}) 子資料夾…`;
+   const dailyFolder=await ensureDailyFolder(targetFolderId,batchDay);
    targetFolderId=dailyFolder.id;
   }
   let successCount=0;
   for(let i=0;i<uploadList.length;i++){
-   const p=uploadList[i];
+   const {photo:p,original}=uploadList[i];
    if(statusEl)statusEl.textContent=`正在上傳照片 (${i+1}/${uploadList.length})：${photoLabel(p)}…`;
-   const asset=assets.find(a=>a.id===p.id);
-   if(!asset||!asset.original)continue;
-   await uploadOriginalPhoto(p,asset.original,targetFolderId);
+   await uploadOriginalPhoto(p,original,targetFolderId);
    successCount++;
   }
   if(statusEl)statusEl.textContent=`成功上傳 ${successCount} 張原始照片至 Google Drive！本機照片仍保留。`;
  }catch(e){
   if(statusEl)statusEl.textContent=`上傳失敗：${e.message}。已成功項目不受影響。`;
  }finally{
-  uploadingPhotos=false;$('uploadPhotosToDrive').disabled=false;
+  uploadingPhotos=false;monitoringControls();
  }
 });
 
 $('uploadDrive').onclick=async()=>{
- if(monitoringWorking)return;
+ if(monitoringWorking||uploadingPhotos)return;
  let folderId;
  try{folderId=parseDriveId($('driveFolder').value);}catch(e){$('driveStatus').textContent=e.message;return;}
  const batch={day:displayedDay(),formData:readMonInputs()};
