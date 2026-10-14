@@ -1,4 +1,5 @@
 // User-initiated export only. Access tokens and the GIS client live in memory, never in backups.
+import {documentTabs,selectedTab,appendAnchor,verifyProtected,dailyTablePlan,structureRequests,newTable,mergeRequests,contentRequests,assertAppendOnly,namedMarker} from './docs-append.js';
 export const CLIENT_ID='659642111191-16q64t5mbd32hba7um1gvqd3vmc4tn9p.apps.googleusercontent.com';
 const SCOPE='https://www.googleapis.com/auth/drive';
 const DOCX='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -172,5 +173,58 @@ export async function uploadOriginalPhoto(photo,blob,folderId=null,onProgress=nu
  });
  if(!res.id)throw new DriveError('api','Drive 上傳未確認成功；請檢查 Drive。');
  return res;
+}
+
+async function docsApi(url,options={}){
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);
+ try{return await api(url,{...options,signal:controller.signal});}finally{clearTimeout(timer);}
+}
+export async function readGoogleDocument(id){
+ if(!/^[\w-]{10,}$/.test(id||''))throw new DriveError('input','Google 文件 ID 無效。');
+ return docsApi(`https://docs.googleapis.com/v1/documents/${encodeURIComponent(id)}?includeTabsContent=true`);
+}
+export async function inspectMaster(value){
+ const id=parseDriveId(value);if(!id)throw new DriveError('input','請貼上 Google 文件副本網址。');
+ const file=await api(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true&fields=id,name,mimeType,parents,capabilities(canEdit)`);
+ if(file.mimeType!==GOOGLE_DOC)throw new DriveError('input','這仍是 Word 或其他檔案。請使用原生 Google 文件副本，不會修改原 Word 母檔。');
+ if(file.capabilities?.canEdit!==true)throw new DriveError('api','目前 Google 帳號沒有此文件的編輯權限。');
+ const document=await readGoogleDocument(id),tabs=documentTabs(document);
+ if(!tabs.length)throw new DriveError('api','Google 未回傳可操作的文件分頁。');
+ return {file,document,tabs:tabs.map(t=>({id:t.id,title:t.title}))};
+}
+export async function appendMonitoringRecord({masterId,tabId,sourceId,day,fingerprint,onProgress=()=>{},onJournal}){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^[a-f0-9]{64}$/.test(fingerprint))throw new DriveError('input','追加識別資料無效。');
+ if(typeof onJournal!=='function')throw new DriveError('input','追加操作必須能保存本機操作紀錄。');
+ if(masterId===sourceId)throw new DriveError('input','當日文件不可與母檔相同。');
+ const checked=await inspectMaster(masterId),before=checked.document;
+ selectedTab(before,tabId);
+ const source=await readGoogleDocument(sourceId),plan=dailyTablePlan(source);
+ const suffix=`${day}_${fingerprint}`,pending=`fpn_pending_${suffix}`,done=`fpn_done_${suffix}`;
+ if(namedMarker(before,tabId,pending)||namedMarker(before,tabId,done))throw new DriveError('duplicate','母檔已有相同內容的追加標記。請開啟文件核對，不會重複追加。');
+ const anchor=appendAnchor(before,tabId),tail=selectedTab(before,tabId).data.body.content.at(-1);
+ // A trailing empty placeholder may inherit newline styling; never exclude non-empty old text.
+ const emptyTail=tail.paragraph.elements.every(e=>e.textRun)&&tail.paragraph.elements.map(e=>e.textRun.content||'').join('')==='\n';
+ const boundary=emptyTail?tail.startIndex:anchor+1;
+ let current=before;
+ const write=async(phase,requests,floor)=>{
+  assertAppendOnly(requests,tabId,floor,anchor+1);
+  verifyProtected(before,current,tabId,boundary);
+  // Persist BEFORE sending. A lost response may already have committed; never auto-retry.
+  onJournal({phase,masterId,tabId,sourceId,day,fingerprint});onProgress(phase);
+  await docsApi(`https://docs.googleapis.com/v1/documents/${encodeURIComponent(masterId)}:batchUpdate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requests,writeControl:{requiredRevisionId:current.revisionId}})});
+  current=await readGoogleDocument(masterId);verifyProtected(before,current,tabId,boundary);
+ };
+ await write('建立追加表格',structureRequests(anchor,tabId,day,pending,plan.rows.length),anchor);
+ let table=newTable(current,tabId,anchor),merges=mergeRequests(table,tabId,plan);
+ if(merges.length){await write('合併新表格儲存格',merges,table.startIndex);table=newTable(current,tabId,anchor);}
+ await write('填入文字與照片',contentRequests(table,tabId,plan,done,anchor,day),table.startIndex);
+ if(!namedMarker(current,tabId,done))throw new DriveError('api','追加完成標記未確認；請核對母檔，不會自動重試。');
+ const result=newTable(current,tabId,anchor).table;
+ let expectedText='',actualText='',expectedImages=0,actualImages=0;
+ for(const row of plan.rows)for(const cell of row){expectedText+=cell.segments.filter(s=>s.kind==='text').map(s=>s.text).join('')+'\n';expectedImages+=cell.segments.filter(s=>s.kind==='image').length;}
+ for(const row of result.tableRows)for(const cell of row.tableCells)for(const node of cell.content)for(const e of node.paragraph?.elements||[]){actualText+=e.textRun?.content||'';if(e.inlineObjectElement)actualImages++;}
+ if(expectedText!==actualText||expectedImages!==actualImages)throw new DriveError('api','新增文字或照片數量核對不符，請檢查母檔；未刪除任何內容。');
+ onJournal({phase:'verified',masterId,tabId,sourceId,day,fingerprint});
+ return {name:checked.file.name,webViewLink:`https://docs.google.com/document/d/${encodeURIComponent(masterId)}/edit`,images:actualImages,rows:result.tableRows.length};
 }
 

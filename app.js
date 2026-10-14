@@ -1,5 +1,5 @@
 import * as db from './db.js';
-import {authorize,hasToken,parseDriveId,uploadDayDoc,uploadOriginalPhoto,listSubfolders,listSharedDrives,verifyFolder,createFolder,ensureDailyFolder} from './drive.js';
+import {authorize,hasToken,parseDriveId,uploadDayDoc,uploadOriginalPhoto,listSubfolders,listSharedDrives,verifyFolder,createFolder,ensureDailyFolder,inspectMaster,appendMonitoringRecord} from './drive.js';
 import {preparePhotoGroups,photoTableDocx,tablePlan,monitoringDocx} from './docx.js';
 import {
   MON_FIELDS,
@@ -885,7 +885,8 @@ async function prepareMonitoringDay({day=displayedDay(),formData=readMonInputs()
 let monitoringWorking=false;
 function monitoringControls(){
  const busy=monitoringWorking||uploadingPhotos;
- for(const id of ['exportMonDocx','uploadDrive','uploadPhotosToDrive','browseMonitoringDriveFolders','browseDriveFolders','driveFolder','photoDriveFolder','monitoringAutoDailySubfolder','autoDailySubfolder','connectDrive','switchGoogleAccount'])$(id).disabled=busy;
+ for(const id of ['exportMonDocx','uploadDrive','uploadPhotosToDrive','browseMonitoringDriveFolders','browseDriveFolders','driveFolder','photoDriveFolder','monitoringAutoDailySubfolder','autoDailySubfolder','connectDrive','switchGoogleAccount','masterDocUrl','masterTab','checkMaster'])$(id).disabled=busy;
+ $('appendMaster').disabled=busy||!masterReady();$('openMaster').disabled=busy||!checkedMaster;
 }
 $('exportMonDocx').onclick=async()=>{
  if(monitoringWorking||uploadingPhotos)return;monitoringWorking=true;monitoringControls();
@@ -1129,6 +1130,63 @@ $('uploadDrive').onclick=async()=>{
   $('driveResult').append(link);
   $('driveStatus').textContent=`已上傳 ${file.name||day} 並轉為 Google Doc。轉換可能改變版面，請開啟檢查。此操作不會同步本機資料。`;
  }catch(e){$('driveStatus').textContent=`${e.kind==='auth'?'授權':e.kind==='network'?'網路':e.kind==='api'?'Drive API':'匯出'}失敗：${e.message}`;if(!hasToken())$('driveAccount').textContent='尚未授權或授權已過期；請重新登入。';}
+ finally{monitoringWorking=false;monitoringControls();}
+};
+// Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
+let checkedMaster=null;
+const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
+try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}
+function masterReady(){return !!checkedMaster&&$('masterDocUrl').value.trim()===checkedMaster.input&&checkedMaster.tabs.some(t=>(t.id||'')===$('masterTab').value);}
+function masterJournal(){const storage=safeGetLocalStorage();if(!storage)throw Error('無法保存本機操作紀錄，為避免重複追加，暫不寫入母檔。');const raw=storage.getItem(MASTER_JOURNAL_KEY);const data=raw?JSON.parse(raw):{};if(!data||Array.isArray(data)||typeof data!=='object')throw Error('操作紀錄異常，請先核對母檔；不要清除網站資料。');return {storage,data};}
+function saveMasterJournal(key,entry){const {storage,data}=masterJournal();data[key]=entry;storage.setItem(MASTER_JOURNAL_KEY,JSON.stringify(data));}
+$('masterDocUrl').addEventListener('input',()=>{checkedMaster=null;$('masterStatus').textContent='';monitoringControls();});
+$('masterTab').addEventListener('change',()=>monitoringControls());
+$('switchGoogleAccount').addEventListener('click',()=>{checkedMaster=null;$('masterStatus').textContent='帳號切換後請重新檢查母檔。';});
+$('openMaster').onclick=()=>{if(checkedMaster)window.open(`https://docs.google.com/document/d/${encodeURIComponent(checkedMaster.file.id)}/edit`,'_blank','noopener,noreferrer');};
+$('checkMaster').onclick=async()=>{
+ if(monitoringWorking||uploadingPhotos)return;
+ const input=$('masterDocUrl').value.trim();checkedMaster=null;monitoringWorking=true;monitoringControls();
+ try{
+  $('masterStatus').textContent='正在唯讀檢查格式、編輯權限與分頁…';
+  const result=await inspectMaster(input);checkedMaster={...result,input};$('masterTab').replaceChildren();
+  if(result.tabs.length>1){const option=document.createElement('option');option.value='';option.textContent='請選擇要追加的分頁';$('masterTab').append(option);}
+  for(const tab of result.tabs){const option=document.createElement('option');option.value=tab.id||'';option.textContent=tab.title;$('masterTab').append(option);}
+  $('masterTabLabel').hidden=result.tabs.length<=1;
+  try{safeGetLocalStorage()?.setItem(MASTER_TARGET_KEY,input);}catch{}
+  $('masterStatus').textContent=`可追加：${result.file.name}。${result.tabs.length>1?'請選擇分頁。':''}尚未修改任何內容。`;
+ }catch(e){$('masterStatus').textContent=`檢查失敗：${e.message}（未修改文件）`;}
+ finally{monitoringWorking=false;monitoringControls();}
+};
+$('appendMaster').onclick=async()=>{
+ if(monitoringWorking||uploadingPhotos||!masterReady())return;
+ if(!navigator.locks?.request){$('masterStatus').textContent='此瀏覽器沒有多分頁防重複鎖，暫不追加；當日 Word 與獨立 Google 文件仍可匯出。';return;}
+ const target={id:checkedMaster.file.id,name:checkedMaster.file.name,tabId:$('masterTab').value||null,parent:checkedMaster.file.parents?.[0]||null};
+ const batch={day:displayedDay(),formData:readMonInputs()};
+ if(!confirm(`將 ${batch.day} 紀錄追加至「${target.name}」末尾，並保留當日獨立 Google 文件。\n請確認這是測試副本；原有內容不刪除、不覆寫。是否繼續？`))return;
+ monitoringWorking=true;monitoringControls();
+ try{
+  await authorize();
+  await navigator.locks.request(`field-master-${target.id}-${target.tabId||''}`,{ifAvailable:true},async lock=>{
+   if(!lock)throw Error('另一個分頁正在操作這份母檔，請稍後檢查。');
+   $('masterStatus').textContent='正在凍結當日表單與照片快照…';
+   const {day,docBlob}=await prepareMonitoringDay(batch);
+   const digest=await crypto.subtle.digest('SHA-256',await docBlob.arrayBuffer());
+   const fingerprint=[...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,'0')).join('');
+   const key=`${target.id}:${target.tabId||''}:${day}:${fingerprint}`,{data}=masterJournal(),previous=data[key];
+   for(const record of Object.values(data))if(record.masterId===target.id&&(record.tabId||null)===target.tabId&&!['verified','source-ready','source-uploading'].includes(record.phase))throw Error('此母檔有未確認完成的操作。請先開啟母檔核對；不自動重試，也不要清除網站資料。');
+   if(previous&&previous.phase!=='source-ready')throw Error(previous.phase==='verified'?'相同內容已完成追加，不會重複加入。':'先前上傳結果未確認，請核對 Drive；不自動重新上傳。');
+   let sourceId=previous?.sourceId;
+   if(!sourceId){
+    saveMasterJournal(key,{phase:'source-uploading',masterId:target.id,tabId:target.tabId,day,fingerprint});
+    $('masterStatus').textContent='正在建立當日獨立 Google 文件…';
+    sourceId=(await uploadDayDoc(day,docBlob,target.parent)).id;
+    saveMasterJournal(key,{phase:'source-ready',masterId:target.id,tabId:target.tabId,sourceId,day,fingerprint});
+   }
+   const sourceLink=document.createElement('a');sourceLink.href=`https://docs.google.com/document/d/${encodeURIComponent(sourceId)}/edit`;sourceLink.target='_blank';sourceLink.rel='noopener noreferrer';sourceLink.textContent='開啟當日獨立 Google 文件';$('driveResult').replaceChildren(sourceLink);
+   const result=await appendMonitoringRecord({masterId:target.id,tabId:target.tabId,sourceId,day,fingerprint,onProgress:phase=>{$('masterStatus').textContent=`${phase}…請勿關閉頁面。`;},onJournal:entry=>saveMasterJournal(key,entry)});
+   $('masterStatus').textContent=`已追加 ${day}：${result.rows} 列、${result.images} 張照片。原有內容已比對保留；請開啟副本核對版面。`;
+  });
+ }catch(e){$('masterStatus').textContent=`已停止：${e.message} 如已建立新表格，會保留現況供核對，不刪除、不自動重試。`;}
  finally{monitoringWorking=false;monitoringControls();}
 };
 $('persist').onclick=()=>run(async()=>{const ok=await navigator.storage?.persist?.();say(ok?'瀏覽器允許持續儲存，仍須備份':'未取得持續儲存保證，請備份');});
