@@ -1,4 +1,5 @@
 import * as db from './db.js';
+import * as docsAppendInfo from './docs-append.js';
 import {authorize,hasToken,parseDriveId,uploadDayDoc,uploadOriginalPhoto,listSubfolders,listSharedDrives,verifyFolder,createFolder,ensureDailyFolder,inspectMaster,appendMonitoringRecord} from './drive.js';
 import {preparePhotoGroups,photoTableDocx,tablePlan,monitoringDocx,monitoringRowLayout} from './docx.js';
 import {
@@ -1134,6 +1135,8 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
+if($('masterBuild'))$('masterBuild').textContent=`App v25 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+$('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}
 function masterReady(){return !!checkedMaster&&$('masterDocUrl').value.trim()===checkedMaster.input&&checkedMaster.tabs.some(t=>(t.id||'')===$('masterTab').value);}
@@ -1159,6 +1162,7 @@ $('checkMaster').onclick=async()=>{
 };
 $('appendMaster').onclick=async()=>{
  if(monitoringWorking||uploadingPhotos||!masterReady())return;
+ if(docsAppendInfo.DOCS_APPEND_BUILD!=='softbreak-v2'){$('masterStatus').textContent='追加核心仍是舊版，尚未寫入。請使用「更新 App 程式」連結，不要清除網站資料。';return;}
  if(!navigator.locks?.request){$('masterStatus').textContent='此瀏覽器沒有多分頁防重複鎖，暫不追加；當日 Word 與獨立 Google 文件仍可匯出。';return;}
  const target={id:checkedMaster.file.id,name:checkedMaster.file.name,tabId:$('masterTab').value||null,parent:checkedMaster.file.parents?.[0]||null};
  const batch={day:displayedDay(),formData:readMonInputs()};

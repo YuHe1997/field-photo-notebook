@@ -1,4 +1,5 @@
 // Pure append-only planning. Never deletes/replaces old document content or changes global styles.
+export const DOCS_APPEND_BUILD='softbreak-v2';
 export function documentTabs(document){
  const out=[];function walk(tabs){for(const tab of tabs||[]){if(tab.documentTab)out.push({id:tab.tabProperties?.tabId,title:tab.tabProperties?.title||'文件',data:tab.documentTab});walk(tab.childTabs);}}
  walk(document.tabs);
