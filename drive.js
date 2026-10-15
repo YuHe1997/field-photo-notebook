@@ -1,5 +1,5 @@
 // User-initiated export only. Access tokens and the GIS client live in memory, never in backups.
-import {documentTabs,selectedTab,appendAnchor,verifyProtected,dailyTablePlan,structureRequests,newTable,mergeRequests,contentRequests,assertAppendOnly,namedMarker} from './docs-append.js';
+import {documentTabs,selectedTab,appendAnchor,verifyProtected,dailyTablePlan,structureRequests,newTable,mergeRequests,contentRequests,assertAppendOnly,namedMarker,logicalTableCells} from './docs-append.js';
 export const CLIENT_ID='659642111191-16q64t5mbd32hba7um1gvqd3vmc4tn9p.apps.googleusercontent.com';
 const SCOPE='https://www.googleapis.com/auth/drive';
 const DOCX='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -192,13 +192,13 @@ export async function inspectMaster(value){
  if(!tabs.length)throw new DriveError('api','Google 未回傳可操作的文件分頁。');
  return {file,document,tabs:tabs.map(t=>({id:t.id,title:t.title}))};
 }
-export async function appendMonitoringRecord({masterId,tabId,sourceId,day,fingerprint,onProgress=()=>{},onJournal}){
+export async function appendMonitoringRecord({masterId,tabId,sourceId,day,fingerprint,rowLayout,onProgress=()=>{},onJournal}){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^[a-f0-9]{64}$/.test(fingerprint))throw new DriveError('input','追加識別資料無效。');
  if(typeof onJournal!=='function')throw new DriveError('input','追加操作必須能保存本機操作紀錄。');
  if(masterId===sourceId)throw new DriveError('input','當日文件不可與母檔相同。');
  const checked=await inspectMaster(masterId),before=checked.document;
  selectedTab(before,tabId);
- const source=await readGoogleDocument(sourceId),plan=dailyTablePlan(source);
+ const source=await readGoogleDocument(sourceId),plan=dailyTablePlan(source,{rowLayout});
  const suffix=`${day}_${fingerprint}`,pending=`fpn_pending_${suffix}`,done=`fpn_done_${suffix}`;
  if(namedMarker(before,tabId,pending)||namedMarker(before,tabId,done))throw new DriveError('duplicate','母檔已有相同內容的追加標記。請開啟文件核對，不會重複追加。');
  const anchor=appendAnchor(before,tabId),tail=selectedTab(before,tabId).data.body.content.at(-1);
@@ -222,7 +222,7 @@ export async function appendMonitoringRecord({masterId,tabId,sourceId,day,finger
  const result=newTable(current,tabId,anchor).table;
  let expectedText='',actualText='',expectedImages=0,actualImages=0;
  for(const row of plan.rows)for(const cell of row){expectedText+=cell.segments.filter(s=>s.kind==='text').map(s=>s.text).join('')+'\n';expectedImages+=cell.segments.filter(s=>s.kind==='image').length;}
- for(const row of result.tableRows)for(const cell of row.tableCells)for(const node of cell.content)for(const e of node.paragraph?.elements||[]){actualText+=e.textRun?.content||'';if(e.inlineObjectElement)actualImages++;}
+ for(const [i,row] of result.tableRows.entries())for(const {cell} of logicalTableCells(row,plan.columns,plan.rows[i].map(c=>c.span)))for(const node of cell.content)for(const e of node.paragraph?.elements||[]){actualText+=e.textRun?.content||'';if(e.inlineObjectElement)actualImages++;}
  if(expectedText!==actualText||expectedImages!==actualImages)throw new DriveError('api','新增文字或照片數量核對不符，請檢查母檔；未刪除任何內容。');
  onJournal({phase:'verified',masterId,tabId,sourceId,day,fingerprint});
  return {name:checked.file.name,webViewLink:`https://docs.google.com/document/d/${encodeURIComponent(masterId)}/edit`,images:actualImages,rows:result.tableRows.length};

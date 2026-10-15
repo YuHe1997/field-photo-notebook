@@ -44,6 +44,11 @@ export function monitoringPlan(formData,groups){
  const f=formData||{};
  return {form:f,photoPlan:p};
 }
+// Logical grid of the DOCX we actually generate; used to validate Docs import normalization.
+export function monitoringRowLayout(groups){
+ const photos=groups?.length?tablePlan(groups):[];
+ return [[1,1],[1,1],[2],[2],[1,1],[1,1],[1,1],[2],...(photos.length?photos.map(row=>row.kind==='description'?[2]:[1,1]):[[2]])];
+}
 export async function monitoringDocx(formData,groups){
  const plan=groups?.length?tablePlan(groups):[],media=[],relations=[`<Relationship Id="styles" Type="${officeRel}/styles" Target="styles.xml"/>`];
  let nextId=0;

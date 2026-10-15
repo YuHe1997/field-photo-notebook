@@ -26,7 +26,34 @@ export function appendAnchor(document,tabId){
  return tail.endIndex-1;
 }
 export function namedMarker(document,tabId,name){const ranges=selectedTab(document,tabId).data.namedRanges||document.namedRanges||{};return Object.values(ranges).some(group=>group.name===name||group.namedRanges?.some(r=>r.name===name));}
-export function dailyTablePlan(document){
+// Some Docs import/merge responses are sparse or retain zero-span covered cells.
+// Normalize only against the known DOCX grid (or explicit positive spans), never drop content.
+export function logicalTableCells(row,columns,expected){
+ const raw=row.tableCells||[],cells=[];
+ const isEmpty=cell=>(cell.content||[]).every(n=>n.paragraph&&!n.paragraph.positionedObjectIds?.length&&(n.paragraph.elements||[]).every(e=>e.textRun&&!e.textRun.content?.trim()));
+ for(const cell of raw){
+  const style=cell.tableCellStyle||{};
+  if((style.rowSpan??1)>1)throw Error('目前不支援跨列合併，未追加。');
+  if(![0,1].includes(style.rowSpan??1)||style.columnSpan!==undefined&&(!Number.isInteger(style.columnSpan)||style.columnSpan<0||style.columnSpan>columns))throw Error('儲存格跨度資料無效，未追加。');
+  if((style.columnSpan===0||style.rowSpan===0)&&!(expected&&raw.length===expected.length)){
+   if(!isEmpty(cell))throw Error('合併覆蓋儲存格內仍有內容，未追加，避免遺漏。');
+   continue;
+  }
+  cells.push({cell,span:style.columnSpan??1});
+ }
+ if(expected?.length===1&&expected[0]===columns&&cells.length===2&&cells[0].span===columns&&isEmpty(cells[1].cell))cells.pop();
+ if(expected){
+  if(!Array.isArray(expected)||expected.some(s=>s!==1&&s!==2)||expected.reduce((a,b)=>a+b,0)!==columns||expected.length!==cells.length)throw Error(`轉換後表格與當日範本不符（有效儲存格 ${cells.length}、預期 ${expected?.length??'?'}），未追加。`);
+  cells.forEach((entry,i)=>{
+   // A sole full-width cell is unambiguous only with the original generated DOCX grid.
+   if(entry.span!==expected[i]&&entry.span!==0&&!(cells.length===1&&entry.span===1&&expected[i]===columns))throw Error('轉換後合併欄位與當日範本不符，未追加。');
+   entry.span=expected[i];
+  });
+ }
+ if(cells.some(e=>!Number.isInteger(e.span)||e.span<1)||cells.reduce((n,e)=>n+e.span,0)!==columns)throw Error(`表格合併結構不完整（${cells.length} 格，欄跨度 ${cells.map(e=>e.span).join('+')}，預期 ${columns}），未追加。`);
+ return cells;
+}
+export function dailyTablePlan(document,{rowLayout}={}){
  const tabs=documentTabs(document);if(tabs.length!==1)throw Error('當日文件必須只有一個分頁。');
  const data=tabs[0].data,body=data.body?.content||[],tables=body.filter(n=>n.table);
  if(tables.length!==1)throw Error('當日文件不是單一監看紀錄表，未追加。');
@@ -34,10 +61,12 @@ export function dailyTablePlan(document){
  if(Object.keys(data.headers||{}).length||Object.keys(data.footers||{}).length||Object.keys(data.footnotes||{}).length)throw Error('當日文件有頁首頁尾或註腳，未追加，避免遺漏。');
  const source=tables[0].table,columns=source.columns;
  if(columns!==2||!source.tableRows?.length||source.tableRows.length>1000)throw Error('當日表格欄數／列數不支援。');
- const rows=source.tableRows.map(row=>{
+ if(rowLayout&&rowLayout.length!==source.tableRows.length)throw Error('轉換後表格列數與當日範本不符，未追加。');
+ const rows=source.tableRows.map((row,rowIndex)=>{
   let column=0;
-  const cells=row.tableCells.map(cell=>{
-   const span=cell.tableCellStyle?.columnSpan||1;if((cell.tableCellStyle?.rowSpan||1)!==1)throw Error('目前不支援跨列合併，未追加。');
+  let normalized;
+  try{normalized=logicalTableCells(row,columns,rowLayout?.[rowIndex]);}catch(e){throw Error(`第 ${rowIndex+1} 列：${e.message}`);}
+  const cells=normalized.map(({cell,span})=>{
    const segments=[],paragraphs=[];let offset=0;
    for(const e of cell.content||[]){
     if(!e.paragraph||e.paragraph.bullet)throw Error('儲存格有巢狀表格／項目清單等不支援結構，未追加。');
@@ -76,9 +105,8 @@ export function contentRequests(table,tabId,plan,done,anchor,day){
  const flat=[];
  if(table.table.tableRows.length!==plan.rows.length)throw Error('新增列數不符，停止。');
  plan.rows.forEach((row,i)=>{
-  const cells=table.table.tableRows[i].tableCells;
-  if(cells.length!==row.length)throw Error('新增表格合併結果不符，停止。');
-  row.forEach((source,j)=>{const cell=cells[j],index=cell.content?.[0]?.startIndex;if(!Number.isInteger(index)||(cell.tableCellStyle?.columnSpan||1)!==source.span)throw Error('新增儲存格格式不符，停止。');flat.push({source,cell,index});});
+  const cells=logicalTableCells(table.table.tableRows[i],plan.columns,row.map(c=>c.span));
+  row.forEach((source,j)=>{const cell=cells[j].cell,index=cell.content?.[0]?.startIndex;if(!Number.isInteger(index))throw Error('新增儲存格格式不符，停止。');flat.push({source,cell,index});});
  });
  // Descending indices and reversed segments avoid shifting the unfilled cells.
  const requests=[];

@@ -1,6 +1,6 @@
 import * as db from './db.js';
 import {authorize,hasToken,parseDriveId,uploadDayDoc,uploadOriginalPhoto,listSubfolders,listSharedDrives,verifyFolder,createFolder,ensureDailyFolder,inspectMaster,appendMonitoringRecord} from './drive.js';
-import {preparePhotoGroups,photoTableDocx,tablePlan,monitoringDocx} from './docx.js';
+import {preparePhotoGroups,photoTableDocx,tablePlan,monitoringDocx,monitoringRowLayout} from './docx.js';
 import {
   MON_FIELDS,
   monKey,
@@ -880,7 +880,7 @@ async function prepareMonitoringDay({day=displayedDay(),formData=readMonInputs()
  const snapshot=await db.snapshot(),byId=new Map(snapshot.photos.map(p=>[p.id,p]));
  const included=snapshot.groups.filter(g=>g.workDay===day||g.photoIds.some(id=>byId.has(id)&&workDayOf(byId.get(id))===day)).sort((a,b)=>(a.createdAt??a.updatedAt??0)-(b.createdAt??b.updatedAt??0)||a.id.localeCompare(b.id));
  const prepared=included.length?await preparePhotoGroups(snapshot,included.map(g=>g.id)):[];
- return {day,docBlob:await monitoringDocx(formData,prepared)};
+ return {day,docBlob:await monitoringDocx(formData,prepared),rowLayout:monitoringRowLayout(prepared)};
 }
 let monitoringWorking=false;
 function monitoringControls(){
@@ -1163,13 +1163,14 @@ $('appendMaster').onclick=async()=>{
  const target={id:checkedMaster.file.id,name:checkedMaster.file.name,tabId:$('masterTab').value||null,parent:checkedMaster.file.parents?.[0]||null};
  const batch={day:displayedDay(),formData:readMonInputs()};
  if(!confirm(`將 ${batch.day} 紀錄追加至「${target.name}」末尾，並保留當日獨立 Google 文件。\n請確認這是測試副本；原有內容不刪除、不覆寫。是否繼續？`))return;
+ let masterWriteAttempted=false;
  monitoringWorking=true;monitoringControls();
  try{
   await authorize();
   await navigator.locks.request(`field-master-${target.id}-${target.tabId||''}`,{ifAvailable:true},async lock=>{
    if(!lock)throw Error('另一個分頁正在操作這份母檔，請稍後檢查。');
    $('masterStatus').textContent='正在凍結當日表單與照片快照…';
-   const {day,docBlob}=await prepareMonitoringDay(batch);
+   const {day,docBlob,rowLayout}=await prepareMonitoringDay(batch);
    const digest=await crypto.subtle.digest('SHA-256',await docBlob.arrayBuffer());
    const fingerprint=[...new Uint8Array(digest)].map(n=>n.toString(16).padStart(2,'0')).join('');
    const key=`${target.id}:${target.tabId||''}:${day}:${fingerprint}`,{data}=masterJournal(),previous=data[key];
@@ -1183,10 +1184,10 @@ $('appendMaster').onclick=async()=>{
     saveMasterJournal(key,{phase:'source-ready',masterId:target.id,tabId:target.tabId,sourceId,day,fingerprint});
    }
    const sourceLink=document.createElement('a');sourceLink.href=`https://docs.google.com/document/d/${encodeURIComponent(sourceId)}/edit`;sourceLink.target='_blank';sourceLink.rel='noopener noreferrer';sourceLink.textContent='開啟當日獨立 Google 文件';$('driveResult').replaceChildren(sourceLink);
-   const result=await appendMonitoringRecord({masterId:target.id,tabId:target.tabId,sourceId,day,fingerprint,onProgress:phase=>{$('masterStatus').textContent=`${phase}…請勿關閉頁面。`;},onJournal:entry=>saveMasterJournal(key,entry)});
+   const result=await appendMonitoringRecord({masterId:target.id,tabId:target.tabId,sourceId,day,fingerprint,rowLayout,onProgress:phase=>{$('masterStatus').textContent=`${phase}…請勿關閉頁面。`;},onJournal:entry=>{saveMasterJournal(key,entry);masterWriteAttempted=true;}});
    $('masterStatus').textContent=`已追加 ${day}：${result.rows} 列、${result.images} 張照片。原有內容已比對保留；請開啟副本核對版面。`;
   });
- }catch(e){$('masterStatus').textContent=`已停止：${e.message} 如已建立新表格，會保留現況供核對，不刪除、不自動重試。`;}
+ }catch(e){$('masterStatus').textContent=`已停止：${e.message}${masterWriteAttempted?' 如已建立新表格，會保留現況供核對，不刪除、不自動重試。':' 母檔尚未開始寫入，不需刪除任何表格。'}`;}
  finally{monitoringWorking=false;monitoringControls();}
 };
 $('persist').onclick=()=>run(async()=>{const ok=await navigator.storage?.persist?.();say(ok?'瀏覽器允許持續儲存，仍須備份':'未取得持續儲存保證，請備份');});
