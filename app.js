@@ -1,6 +1,6 @@
 import * as db from './db.js';
 import * as docsAppendInfo from './docs-append.js';
-import {authorize,hasToken,parseDriveId,uploadDayDoc,validateGoogleDocName,uploadOriginalPhoto,listSubfolders,listSharedDrives,verifyFolder,createFolder,ensureDailyFolder,inspectMaster,appendMonitoringRecord} from './drive.js';
+import {authorize,hasToken,parseDriveId,uploadDayDoc,validateGoogleDocName,uploadOriginalPhoto,listSubfolders,listMonitoringDocuments,listSharedDrives,verifyFolder,createFolder,ensureDailyFolder,inspectMaster,appendMonitoringRecord} from './drive.js';
 import {preparePhotoGroups,photoTableDocx,tablePlan,monitoringDocx,monitoringRowLayout} from './docx.js';
 import {
   MON_FIELDS,
@@ -876,6 +876,7 @@ function preserveTemplateForm(day,fields){
 }
 $('fillMonTemplate').onclick=async()=>{
  if(monitoringWorking||uploadingPhotos||dayTransitioning)return;
+ if(!masterReady()){$('monStatus').textContent='請先登入、選擇並檢查本月母表。';return;}
  const day=displayedDay(),generation=daySwitchGeneration,current=readMonInputs(true),input=$('masterDocUrl').value.trim(),preferred=$('masterTab').value||null;
  monitoringWorking=true;monitoringControls();
  try{
@@ -920,8 +921,9 @@ function showDailySource(sourceId){
 }
 function monitoringControls(){
  const busy=monitoringWorking||uploadingPhotos||dayTransitioning;
- for(const id of ['exportMonDocx','uploadDrive','uploadPhotosToDrive','browseMonitoringDriveFolders','browseDriveFolders','driveFolder','photoDriveFolder','monitoringAutoDailySubfolder','autoDailySubfolder','connectDrive','switchGoogleAccount','masterDocUrl','masterTab','checkMaster','masterStandalone','fillMonTemplate','restoreMonTemplate'])$(id).disabled=busy;
+ for(const id of ['exportMonDocx','uploadDrive','uploadPhotosToDrive','browseMonitoringDriveFolders','browseDriveFolders','driveFolder','photoDriveFolder','monitoringAutoDailySubfolder','autoDailySubfolder','connectDrive','switchGoogleAccount','masterDocUrl','masterTab','checkMaster','masterStandalone','fillMonTemplate','restoreMonTemplate','loginMonthMaster','browseMasterDocuments'])$(id).disabled=busy;
  refreshStandaloneOptions();
+ $('fillMonTemplate').disabled=busy||!masterReady();$('finishMasterSetup').disabled=busy||!masterReady();refreshMasterSelection();
  $('appendMaster').disabled=busy||!masterReady()||!validDay(displayedDay())||displayedDay()!==$('workDay').value;$('openMaster').disabled=busy||!checkedMaster;
 }
 $('exportMonDocx').onclick=async()=>{
@@ -974,6 +976,7 @@ $('monitoringDrivePath').value=savedFolderPath(MONITORING_FOLDER_KEY,savedMonito
 let currentBrowsingFolderId=null,currentBrowsingFolderName='';
 let browsingShared=false,browsingDriveId=null,browsingDriveList=false,folderHistory=[],folderRequest=0;
 async function selectDriveFolder(id,name){
+ if(folderDestination==='master')return;
  try{
   if(folderDestination==='monitoring'&&$('masterStandalone').checked&&!id){$('folderBrowserStatus').textContent='請先進入或建立一個具體資料夾，再選取。';return;}
   if(id)await verifyFolder(id);
@@ -995,21 +998,22 @@ async function showDriveFolder(id,name,shared=false,push=false,driveId=null,driv
  currentBrowsingFolderName=name;
  $('folderBrowserCurrent').textContent=[...folderHistory.map(p=>p.name),name].filter(Boolean).join(' / ');
  $('folderUp').disabled=!folderHistory.length;
- $('folderSelectCurrent').disabled=shared||driveList;
- $('createNewSubfolder').disabled=shared||driveList;
+ $('folderSelectCurrent').hidden=$('folderCreateControls').hidden=folderDestination==='master';
+ $('folderSelectCurrent').disabled=shared||driveList||folderDestination==='master';
+ $('createNewSubfolder').disabled=shared||driveList||folderDestination==='master';
  await refreshFolderList(id);
 }
 async function refreshFolderList(parentId){
- const request=++folderRequest;const shared=browsingShared,driveId=browsingDriveId,driveList=browsingDriveList;
+ const request=++folderRequest;const shared=browsingShared,driveId=browsingDriveId,driveList=browsingDriveList,pickingMaster=folderDestination==='master';
  const listEl=$('folderList'),statusEl=$('folderBrowserStatus');
  if(!listEl)return;
  listEl.replaceChildren();
  if(statusEl)statusEl.textContent='正在讀取資料夾清單…';
  try{
-  const folders=driveList?await listSharedDrives():await listSubfolders(parentId,{shared,driveId});
+  const [folders,documents]=await Promise.all([driveList?listSharedDrives():listSubfolders(parentId,{shared,driveId}),pickingMaster&&!driveList?listMonitoringDocuments(parentId,{driveId}):Promise.resolve([])]);
   if(request!==folderRequest)return;
-  if(!folders.length){
-   if(statusEl)statusEl.textContent=driveList?'目前登入帳號沒有可列出的共用雲端硬碟；請確認使用公司帳號且已加入硬碟成員。':shared?'目前帳號沒有可列出的共用資料夾；可貼上已獲授權的資料夾連結。':'此資料夾內目前沒有子資料夾；可選取目前資料夾或返回上層。';
+  if(!folders.length&&!documents.length){
+   if(statusEl)statusEl.textContent=driveList?'目前登入帳號沒有可列出的共用雲端硬碟；請確認使用公司帳號且已加入硬碟成員。':shared?'目前帳號沒有可列出的共用資料夾；可貼上已獲授權的資料夾連結。':pickingMaster?'此資料夾內沒有原生 Google 文件或子資料夾；請返回上層，或關閉後貼上母表副本網址。':'此資料夾內目前沒有子資料夾；可選取目前資料夾或返回上層。';
    return;
   }
   for(const f of folders){
@@ -1029,10 +1033,15 @@ async function refreshFolderList(parentId){
    enter.type='button';enter.textContent='進入';
    enter.onclick=()=>showDriveFolder(f.id,f.name,false,true,driveList?f.id:driveId);
    li.append(nameSpan,enter);
-   if(!driveList)li.append(btn);
+   if(!driveList&&!pickingMaster)li.append(btn);
    listEl.append(li);
   }
-  if(statusEl)statusEl.textContent=driveList?`共找到 ${folders.length} 個共用雲端硬碟。按「進入」選擇其中的專案資料夾。`:`共找到 ${folders.length} 個資料夾。可進入子資料夾，或選取有新增權限的資料夾。`;
+  for(const file of documents){
+   const li=document.createElement('li'),name=document.createElement('span'),choose=document.createElement('button');li.className='master-document-choice';name.textContent=file.name;choose.type='button';choose.textContent=file.capabilities?.canEdit===true?'選擇母表':'無編輯權限';choose.disabled=file.capabilities?.canEdit!==true;
+   choose.onclick=()=>{if(request!==folderRequest||!$('masterSetupDialog').open||!/^[-\w]+$/.test(file.id))return;$('masterDocUrl').value=`https://docs.google.com/document/d/${file.id}/edit`;$('masterDocUrl').dispatchEvent(new Event('input'));$('masterCheckStatus').textContent=`已選擇：${file.name}。請按「檢查母表」。`;$('folderBrowserDialog').close();++folderRequest;};
+   li.append(name,choose);listEl.append(li);
+  }
+  if(statusEl)statusEl.textContent=driveList?`共找到 ${folders.length} 個共用雲端硬碟。按「進入」選擇其中的專案資料夾。`:pickingMaster?`共 ${folders.length} 個子資料夾、${documents.length} 份 Google 文件。只列出原生 Google 文件，請選擇母表副本，再檢查。`:`共找到 ${folders.length} 個資料夾。可進入子資料夾，或選取有新增權限的資料夾。`;
  }catch(e){
   if(request===folderRequest&&statusEl)statusEl.textContent='讀取失敗：'+e.message;
  }
@@ -1053,29 +1062,34 @@ $('switchGoogleAccount')?.addEventListener('click',async()=>{
 async function openDriveFolderBrowser(destination){
  if(monitoringWorking||uploadingPhotos)return;
  folderDestination=destination;
- const target=folderTarget();
- const inputVal=target.input.value.trim();
+ const target=destination==='master'?null:folderTarget();
+ const inputVal=target?.input.value.trim()||'';
  let folderId=null;
  try{folderId=parseDriveId(inputVal);}catch(e){
-  target.status.textContent=e.message;
+  if(target)target.status.textContent=e.message;
   return;
  }
  folderHistory=[];
- $('folderBrowserHeading').textContent=destination==='monitoring'?'選擇監看紀錄表的 Drive 資料夾':'選擇照片的 Drive 資料夾';
+ const session=++folderRequest;$('folderList').replaceChildren();$('folderBrowserCurrent').textContent='';
+ $('folderSelectCurrent').hidden=$('folderCreateControls').hidden=destination==='master';
+ $('folderBrowserHeading').textContent=destination==='master'?'選擇本月 Google 母表副本':destination==='monitoring'?'選擇監看紀錄表的 Drive 資料夾':'選擇照片的 Drive 資料夾';
  $('folderBrowserDialog')?.showModal();
  if($('newSubfolderName'))$('newSubfolderName').value=displayedDay()||'';
  try{
   await authorize();
+  if(session!==folderRequest||!$('folderBrowserDialog').open)return;
   if(folderId){
    const folder=await verifyFolder(folderId);
+   if(session!==folderRequest||!$('folderBrowserDialog').open)return;
    await showDriveFolder(folderId,savedFolderPath(target.key,folderId)||folder.name||'目標資料夾');
   }else{
    await showDriveFolder(null,'共用雲端硬碟',false,false,null,true);
   }
  }catch(e){
-  if($('folderBrowserStatus'))$('folderBrowserStatus').textContent='授權失敗：'+e.message;
+  if(session===folderRequest&&$('folderBrowserDialog').open)$('folderBrowserStatus').textContent='授權失敗：'+e.message;
  }
 }
+$('browseMasterDocuments').addEventListener('click',()=>openDriveFolderBrowser('master'));
 $('browseDriveFolders')?.addEventListener('click',()=>openDriveFolderBrowser('photos'));
 $('browseMonitoringDriveFolders')?.addEventListener('click',()=>openDriveFolderBrowser('monitoring'));
 
@@ -1087,14 +1101,16 @@ $('folderUp')?.addEventListener('click',()=>{
  if(previous)showDriveFolder(previous.id,previous.name,previous.shared,false,previous.driveId,previous.driveList);
 });
 $('folderSelectCurrent')?.addEventListener('click',()=>{
- if(!browsingShared&&!browsingDriveList)selectDriveFolder(currentBrowsingFolderId,currentBrowsingFolderName);
+ if(folderDestination!=='master'&&!browsingShared&&!browsingDriveList)selectDriveFolder(currentBrowsingFolderId,currentBrowsingFolderName);
 });
 
 $('closeFolderBrowser')?.addEventListener('click',()=>{
- $('folderBrowserDialog')?.close();
+ $('folderBrowserDialog')?.close();++folderRequest;
 });
+$('folderBrowserDialog').addEventListener('cancel',()=>{++folderRequest;});
 
 $('createNewSubfolder')?.addEventListener('click',async()=>{
+ if(folderDestination==='master')return;
  const nameInput=$('newSubfolderName');
  const name=nameInput?.value.trim();
  if(!name){if($('folderBrowserStatus'))$('folderBrowserStatus').textContent='請輸入新資料夾名稱';return;}
@@ -1172,21 +1188,31 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
-if($('masterBuild'))$('masterBuild').textContent=`App v29 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+if($('masterBuild'))$('masterBuild').textContent=`App v30 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
 $('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}
 function masterReady(){return !!checkedMaster&&$('masterDocUrl').value.trim()===checkedMaster.input&&checkedMaster.tabs.some(t=>(t.id||'')===$('masterTab').value);}
+function refreshMasterSelection(){
+ const tab=checkedMaster?.tabs.find(t=>(t.id||'')===$('masterTab').value);
+ $('masterSelectionStatus').textContent=masterReady()?`已檢查：${checkedMaster.file.name}${checkedMaster.tabs.length>1?`／${tab.title}`:''}`:checkedMaster?'請先選擇母表分頁，再完成設定。':'請先登入、選擇並檢查本月母表。';
+}
+$('loginMonthMaster').onclick=async()=>{
+ if(monitoringWorking||uploadingPhotos||dayTransitioning)return;
+ $('masterSetupDialog').showModal();await $('connectDrive').onclick();
+};
+$('closeMasterSetup').onclick=()=>$('masterSetupDialog').close();
+$('finishMasterSetup').onclick=()=>{if(!masterReady()||monitoringWorking||uploadingPhotos||dayTransitioning)return;$('masterSetupDialog').close();$('fillMonTemplate').focus();};
 function masterJournal(){const storage=safeGetLocalStorage();if(!storage)throw Error('無法保存本機操作紀錄，為避免重複追加，暫不寫入母檔。');const raw=storage.getItem(MASTER_JOURNAL_KEY);const data=raw?JSON.parse(raw):{};if(!data||Array.isArray(data)||typeof data!=='object')throw Error('操作紀錄異常，請先核對母檔；不要清除網站資料。');return {storage,data};}
 function saveMasterJournal(key,entry){const {storage,data}=masterJournal();data[key]=entry;storage.setItem(MASTER_JOURNAL_KEY,JSON.stringify(data));}
-$('masterDocUrl').addEventListener('input',()=>{checkedMaster=null;$('masterStatus').textContent='';monitoringControls();});
+$('masterDocUrl').addEventListener('input',()=>{checkedMaster=null;$('masterCheckStatus').textContent='';monitoringControls();});
 function masterTitleNotice(){
  if(!masterReady())return '請先選擇追加分頁。';
  const heading=docsAppendInfo.masterHeadingTemplate?.(checkedMaster.document,$('masterTab').value||null);
  return heading?'將沿用母檔三行標題與格式，不另加日期標題。':'未辨識到母檔三行標題，仍使用原本日期標題；請先確認範本。';
 }
-$('masterTab').addEventListener('change',()=>{try{$('masterStatus').textContent=masterTitleNotice();}catch(e){$('masterStatus').textContent=e.message;}monitoringControls();});
-$('switchGoogleAccount').addEventListener('click',()=>{checkedMaster=null;$('masterStatus').textContent='帳號切換後請重新檢查母檔。';});
+$('masterTab').addEventListener('change',()=>{try{$('masterCheckStatus').textContent=masterTitleNotice();}catch(e){$('masterCheckStatus').textContent=e.message;}monitoringControls();});
+$('switchGoogleAccount').addEventListener('click',()=>{checkedMaster=null;$('masterCheckStatus').textContent='帳號切換後請重新檢查母表。';monitoringControls();});
 $('openMaster').onclick=()=>{if(checkedMaster)window.open(`https://docs.google.com/document/d/${encodeURIComponent(checkedMaster.file.id)}/edit`,'_blank','noopener,noreferrer');};
 function acceptMasterCheck(result,input,preferred=null){
  checkedMaster={...result,input};$('masterTab').replaceChildren();
@@ -1199,10 +1225,10 @@ $('checkMaster').onclick=async()=>{
  if(monitoringWorking||uploadingPhotos)return;
  const input=$('masterDocUrl').value.trim();checkedMaster=null;monitoringWorking=true;monitoringControls();
  try{
-  $('masterStatus').textContent='正在唯讀檢查格式、編輯權限與分頁…';
+  $('masterCheckStatus').textContent='正在唯讀檢查格式、編輯權限與分頁…';
   const result=await inspectMaster(input);acceptMasterCheck(result,input);
-  $('masterStatus').textContent=`可追加：${result.file.name}。${masterTitleNotice()}尚未修改任何內容。`;
- }catch(e){checkedMaster=null;$('masterStatus').textContent=`檢查失敗：${e.message}（未修改文件）`;}
+  $('masterCheckStatus').textContent=`可追加：${result.file.name}。${masterTitleNotice()}尚未修改任何內容。`;
+ }catch(e){checkedMaster=null;$('masterCheckStatus').textContent=`檢查失敗：${e.message}（未修改文件）`;}
  finally{monitoringWorking=false;monitoringControls();}
 };
 $('appendMaster').onclick=async()=>{

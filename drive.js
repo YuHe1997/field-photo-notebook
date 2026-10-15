@@ -99,6 +99,23 @@ export async function listSubfolders(parentId,{shared=false,driveId=null}={}){
  return files;
 }
 
+// Read-only native-document picker; Word originals are deliberately excluded.
+export async function listMonitoringDocuments(parentId,{driveId=null}={}){
+ const parent=parentId||'root';
+ if(!/^[\w-]+$/.test(parent)||driveId&&!/^[\w-]+$/.test(driveId))throw new DriveError('input','資料夾或共用雲端硬碟 ID 格式無效。');
+ const files=[],seen=new Set();let pageToken;
+ do{
+  const params=new URLSearchParams({q:`'${parent}' in parents and mimeType = '${GOOGLE_DOC}' and trashed = false`,fields:'nextPageToken,files(id,name,mimeType,capabilities(canEdit))',pageSize:'100',orderBy:'name',supportsAllDrives:'true',includeItemsFromAllDrives:'true'});
+  if(driveId){params.set('corpora','drive');params.set('driveId',driveId);}
+  if(pageToken)params.set('pageToken',pageToken);
+  const data=await api(`https://www.googleapis.com/drive/v3/files?${params}`);
+  files.push(...(data.files||[]).filter(f=>f.mimeType===GOOGLE_DOC));pageToken=data.nextPageToken;
+  if(pageToken&&seen.has(pageToken))throw new DriveError('api','母表清單分頁重複，請重新讀取。');
+  if(pageToken)seen.add(pageToken);
+ }while(pageToken);
+ return files;
+}
+
 export async function createFolder(name,parentId=null){
  if(!name||!name.trim())throw new DriveError('input','資料夾名稱不可為空');
  const meta={name:name.trim(),mimeType:FOLDER};

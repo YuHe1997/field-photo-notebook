@@ -135,4 +135,17 @@ article,#monForm fieldset{box-shadow:0 2px 8px rgba(42,58,42,.04)}
 @media (hover:hover){#appendMaster:hover:enabled,#uploadPhotosToDrive:hover:enabled,#installHomeScreen:hover:enabled{background:#38553d}}
 #appendMaster:active:enabled,#uploadPhotosToDrive:active:enabled,#installHomeScreen:active:enabled{background:#304b35}
 @media (prefers-reduced-motion:reduce){button:not(.camera-overlay *){transition:none}}
+/* Monthly master setup is explicit and separate from the daily submit action. */
+.monitoring-template{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.monitoring-template>button{width:100%;margin:0}
+.monitoring-template>button:nth-child(n+3){grid-column:1/-1}
+#loginMonthMaster{background:#edf3e7;border-color:#7c9474}
+#masterSetupDialog{box-sizing:border-box;width:calc(100% - 24px);max-width:600px;max-height:85vh;overflow:auto;padding:16px;border:1px solid var(--ui-control);border-radius:12px;background:var(--ui-canvas);color:var(--ui-ink)}
+#masterSetupDialog input,#masterSetupDialog select{width:100%;box-sizing:border-box}
+#masterSetupDialog p,#masterSelectionStatus{overflow-wrap:anywhere}
+#masterSetupDialog details{margin-top:12px}
+#masterStatus:empty{display:none}
+.master-document-choice{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--ui-line)}
+.master-document-choice>span{min-width:0;overflow-wrap:anywhere}
+.master-document-choice>button{flex-shrink:0}
 
