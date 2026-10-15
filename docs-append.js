@@ -1,5 +1,5 @@
-// Pure append-only planning. Never deletes/replaces old document content or changes global styles.
-export const DOCS_APPEND_BUILD='mother-title-v1';
+// Insert-only planning. Existing records are never deleted, replaced or globally restyled.
+export const DOCS_APPEND_BUILD='date-order-v1';
 export function documentTabs(document){
  const out=[];function walk(tabs){for(const tab of tabs||[]){if(tab.documentTab)out.push({id:tab.tabProperties?.tabId,title:tab.tabProperties?.title||'文件',data:tab.documentTab});walk(tab.childTabs);}}
  walk(document.tabs);
@@ -34,7 +34,7 @@ export function masterHeadingTemplate(document,tabId){
  for(let end=body.length-1;end>=0;end--){
   const last=textOf(body[end]);if(!last||linesOf(last).at(-1)!=='監看工作日誌')continue;
   // A title must belong to a following table; do not copy an unrelated note elsewhere.
-  let tableFollows=false;for(let i=end+1;i<Math.min(body.length,end+6);i++){if(body[i].table){tableFollows=true;break;}const text=textOf(body[i]);if(text===null||text.trim())break;}
+  let tableFollows=null;for(let i=end+1;i<Math.min(body.length,end+6);i++){if(body[i].table){tableFollows=body[i];break;}const text=textOf(body[i]);if(text===null||text.trim())break;}
   if(!tableFollows)continue;
   const nodes=[];let lineCount=0;
   for(let i=end;i>=Math.max(0,end-5);i--){const text=textOf(body[i]);if(text===null)break;if(!text.trim())continue;nodes.unshift(body[i]);lineCount+=linesOf(text).length;if(lineCount>=3)break;}
@@ -47,7 +47,7 @@ export function masterHeadingTemplate(document,tabId){
    const p=node.paragraph,style=p.paragraphStyle||{},base=named.find(s=>s.namedStyleType===style.namedStyleType)||normal;
    return {text:textOf(node),paragraphStyle:{...normal.paragraphStyle,...base.paragraphStyle,...style},textStyle:{fontSize:{magnitude:12,unit:'PT'},bold:false,italic:false,underline:false,strikethrough:false,foregroundColor:{color:{rgbColor:{red:0,green:0,blue:0}}},...normal.textStyle,...base.textStyle},runs:p.elements.map(e=>({text:e.textRun.content||'',style:e.textRun.textStyle||{}}))};
   });
-  return {text:'\n'+all,paragraphs,lines};
+  return {text:'\n'+all,paragraphs,lines,startIndex:nodes[0].startIndex,tableStartIndex:tableFollows.startIndex};
  }
  return null;
 }
@@ -131,7 +131,7 @@ export function dailyTablePlan(document,{rowLayout}={}){
  return {columns,rows,rowStyles:source.tableRows.map(row=>row.tableRowStyle||{})};
 }
 const loc=(index,tabId)=>({index,...(tabId?{tabId}:{})});
-export function structureRequests(anchor,tabId,day,pending,rows,heading=null){
+export function structureRequests(anchor,tabId,day,pending,rows,heading=null,placement=null){
  const text=heading?.text||`\n監看紀錄 ${day}\n`,requests=[{insertText:{location:loc(anchor,tabId),text}}];
  const range=(startIndex,endIndex)=>({startIndex,endIndex,...(tabId?{tabId}:{})});
  if(heading){
@@ -147,7 +147,7 @@ export function structureRequests(anchor,tabId,day,pending,rows,heading=null){
    offset+=paragraph.text.length;
   }
  }else requests.push({updateTextStyle:{range:range(anchor+1,anchor+text.length-1),textStyle:{fontSize:{magnitude:12,unit:'PT'},bold:true},fields:'fontSize,bold'}});
- requests.push({createNamedRange:{name:pending,range:range(anchor+1,anchor+text.length)}},{insertTable:{rows,columns:2,endOfSegmentLocation:tabId?{tabId}:{}}});
+ requests.push({createNamedRange:{name:pending,range:range(anchor+1,anchor+text.length)}},{insertTable:{rows,columns:2,...(placement?.mode==='before'?{location:loc(anchor+text.length,tabId)}:{endOfSegmentLocation:tabId?{tabId}:{}})}});
  return requests;
 }
 export function newTable(document,tabId,anchor){const tables=selectedTab(document,tabId).data.body.content.filter(n=>n.table&&n.startIndex>anchor);if(tables.length!==1)throw Error('新增表格無法唯一辨識，停止，不再寫入。');return tables[0];}
@@ -190,6 +190,109 @@ export function assertAppendOnly(requests,tabId,floor,markerFloor=floor){
   const v=r[keys[0]],where=v.location||v.range||v.tableStartLocation||v.tableRange?.tableCellLocation?.tableStartLocation;
   if(where){if((where.tabId||null)!==(tabId||null))throw Error('拒絕跨分頁寫入。');const start=where.index??where.startIndex;if(!Number.isInteger(start)||start<(keys[0]==='createNamedRange'?markerFloor:floor))throw Error('拒絕修改原有內容。');}
   else if(keys[0]!=='insertTable'||(v.endOfSegmentLocation?.tabId||null)!==(tabId||null))throw Error('寫入位置不明。');
-  if(v.fields==='*')throw Error('拒絕全域樣式更新。');
+  if(v.fields?.split(',').some(f=>f.trim()==='*'))throw Error('拒絕全域樣式更新。');
+ }
+}
+
+// Dates are explicit calendar dates, never inferred from upload time, document title or workday.
+export function parseMonitoringDate(value){
+ if(typeof value!=='string')throw Error('請填寫可辨識的監看日期。');
+ const text=value.normalize('NFKC').trim();
+ const m=text.match(/^(民國\s*)?(\d{1,4})\s*(?:年|[-/.])\s*(\d{1,2})\s*(?:月|[-/.])\s*(\d{1,2})\s*日?(?:\s*(?:(?:星期|週)[一二三四五六日天]|\([一二三四五六日天]\)))?$/u);
+ if(!m)throw Error('監看日期無法辨識；請使用西元／民國年月日，不依上傳時間猜日期。');
+ let year=Number(m[2]);if(m[1]||m[2].length<=3){if(year<1||year>300)throw Error('民國年格式無效。');year+=1911;}
+ const month=Number(m[3]),day=Number(m[4]),date=new Date(Date.UTC(year,month-1,day));
+ if(year<1912||year>9999||date.getUTCFullYear()!==year||date.getUTCMonth()+1!==month||date.getUTCDate()!==day)throw Error('監看日期不是有效日期。');
+ return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+function cellText(cell,{strict=false}={}){
+ let text='';for(const node of cell.content||[]){if(!node.paragraph){if(strict)throw Error('文字欄位含巢狀表格，暫不套用。');continue;}
+ for(const run of node.paragraph.elements||[]){if(run.textRun)text+=run.textRun.content||'';else if(strict)throw Error('文字欄位含非文字內容，暫不套用。');}}
+ return text.replace(/\n$/,'');
+}
+const labelPattern=label=>new RegExp('^\\s*'+[...label].map(c=>c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s*')+'\\s*[:：][ \\t]?','u');
+function fieldValue(cell,label){const text=cellText(cell,{strict:true}),m=text.match(labelPattern(label));if(!m)throw Error(`母表最後表格缺少「${label}」欄位，未套用。`);return text.slice(m[0].length).replace(/\u000b/g,'\n');}
+export function lastMonitoringTemplate(document,tabId){
+ const tables=selectedTab(document,tabId).data.body?.content?.filter(n=>n.table)||[],node=tables.at(-1);
+ if(!node||node.table.columns!==2||node.table.tableRows?.length<7)throw Error('母表最後表格不是完整的兩欄監看紀錄，未套用。');
+ const shapes=[[1,1],[1,1],[2],[2],[1,1],[1,1],[1,1]],rows=shapes.map((shape,i)=>logicalTableCells(node.table.tableRows[i],2,shape).map(c=>c.cell));
+ const fields={projectName:fieldValue(rows[0][0],'工程名稱'),date:fieldValue(rows[0][1],'日期'),constructionLocation:fieldValue(rows[1][0],'施工地點'),siteName:fieldValue(rows[1][1],'考古遺址'),watcherCount:fieldValue(rows[2][0],'監看人數'),workScope:fieldValue(rows[3][0],'作業項目、範圍與深度'),strataSummary:fieldValue(rows[4][0],'地層堆積'),strataDesc:cellText(rows[4][1],{strict:true}).replace(/\u000b/g,'\n'),culturalArtifacts:fieldValue(rows[5][0],'文化遺物'),culturalFeatures:fieldValue(rows[5][1],'文化遺跡'),otherEvents:fieldValue(rows[6][0],'其他重要紀事'),dispositionAdvice:fieldValue(rows[6][1],'文資處置建議')};
+ return {fields,date:parseMonitoringDate(fields.date),tableStartIndex:node.startIndex};
+}
+export function sourceMonitoringDate(document){
+ const tabs=documentTabs(document);if(tabs.length!==1)throw Error('來源分頁不唯一，未寫入。');
+ const table=tabs[0].data.body?.content?.find(n=>n.table)?.table,dates=(table?.tableRows||[]).slice(0,7).flatMap(r=>r.tableCells||[]).filter(c=>labelPattern('日期').test(cellText(c)));
+ if(dates.length!==1)throw Error('來源監看日期無法唯一辨識，未寫入。');return parseMonitoringDate(fieldValue(dates[0],'日期'));
+}
+export function monitoringRecords(document,tabId){
+ const body=selectedTab(document,tabId).data.body?.content;if(!Array.isArray(body))throw Error('無法讀取母表內容。');
+ const records=[];
+ for(const node of body){if(!node.table)continue;
+  const first=node.table.tableRows?.[0]?.tableCells||[],dates=first.filter(c=>labelPattern('日期').test(cellText(c))),projects=first.filter(c=>labelPattern('工程名稱').test(cellText(c)));
+  if(!dates.length&&!projects.length)continue; // Front matter and continuation/photo tables stay with their existing record.
+  if(dates.length!==1||projects.length!==1)throw Error('母表有工程／日期欄位不完整的表格，請先核對。');
+  if(!Number.isInteger(node.startIndex)||!Number.isInteger(node.endIndex))throw Error('母表表格位置不完整。');
+  records.push({date:parseMonitoringDate(fieldValue(dates[0],'日期')),tableStartIndex:node.startIndex,tableEndIndex:node.endIndex});
+ }
+ return records;
+}
+function rangeNames(document,tabId){
+ const names=new Set();for(const groups of [document.namedRanges,selectedTab(document,tabId).data.namedRanges])for(const group of Object.values(groups||{})){if(group.name)names.add(group.name);for(const r of group.namedRanges||[])if(r.name)names.add(r.name);}return names;
+}
+export function chronologicalPlacement(document,tabId,value){
+ if(typeof document.revisionId!=='string'||!document.revisionId)throw Error('無法取得母表版本，未插入。');
+ const date=parseMonitoringDate(value),body=selectedTab(document,tabId).data.body?.content||[],names=rangeNames(document,tabId);
+ for(const name of names)if(name.startsWith('fpn_pending_')&&!names.has(name.replace('fpn_pending_','fpn_done_')))throw Error('母表有未確認完成的操作標記，請先核對；不再新增。');
+ let previousEnd=0;for(const node of body){const start=node.startIndex??(node.sectionBreak?0:NaN);if(!Number.isInteger(start)||!Number.isInteger(node.endIndex)||node.endIndex<=start||start<previousEnd)throw Error('母表段落索引不完整或重疊，未插入。');previousEnd=node.endIndex;}
+ const records=monitoringRecords(document,tabId);
+ if(records.some(r=>r.date===date))throw Error(`母表已有 ${date} 的紀錄，停止，避免同日重複；不覆寫。`);
+ // Find a boundary that places this record after EVERY earlier date and before EVERY later date.
+ // Existing records are never reordered. Historic disorder is accepted only if this slot is unique.
+ const slots=[];for(let i=0;i<=records.length;i++)if(records.slice(0,i).every(r=>r.date<date)&&records.slice(i).every(r=>r.date>date))slots.push(i);
+ if(slots.length!==1)throw Error('母表日期次序無法唯一界定插入位置，請先核對；不搬動原有紀錄。');
+ const next=records[slots[0]];
+ if(!next){return {mode:'end',date,anchor:appendAnchor(document,tabId),nextDate:null};}
+ const tableIndex=body.findIndex(n=>n.startIndex===next.tableStartIndex&&n.table),prefix=structuredClone(document);selectedTab(prefix,tabId).data.body.content=structuredClone(body.slice(0,tableIndex+1));
+ const title=masterHeadingTemplate(prefix,tabId);let index=tableIndex-1;
+ if(title?.tableStartIndex===next.tableStartIndex)index=body.findIndex(n=>n.startIndex===title.startIndex);
+ else if(!body[index]?.paragraph||!(body[index].paragraph.elements||[]).every(r=>r.textRun)||(!/^\s*監看紀錄\s+\d{4}-\d{2}-\d{2}\s*$/u.test(cellParagraphText(body[index]))&&cellParagraphText(body[index]).trim()))throw Error('較晚日期之前沒有安全的標題／空白段落，未插入。');
+ if(index>0&&body[index-1].paragraph&&cellParagraphText(body[index-1])==='\n')index--;
+ const node=body[index];if(!node?.paragraph||node.paragraph.bullet||node.paragraph.positionedObjectIds?.length||!Number.isInteger(node.startIndex)||node.startIndex<1||!Number.isInteger(node.endIndex)||node.endIndex<=node.startIndex)throw Error('無法取得較晚紀錄前的安全段落位置。');
+ return {mode:'before',date,anchor:node.startIndex,nextDate:next.date,nextTableStartIndex:next.tableStartIndex};
+}
+function cellParagraphText(node){return node?.paragraph&&(node.paragraph.elements||[]).every(r=>r.textRun)?node.paragraph.elements.map(r=>r.textRun.content||'').join(''):'';}
+function shiftBodyIndices(value,delta){if(Array.isArray(value))return value.map(v=>shiftBodyIndices(v,delta));if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,(k==='startIndex'||k==='endIndex')&&Number.isInteger(v)?v+delta:shiftBodyIndices(v,delta)]));return value;}
+export function insertionExtent(before,after,tabId,placement){
+ const a=selectedTab(before,tabId).data.body.content,b=selectedTab(after,tabId).data.body.content,delta=b.at(-1)?.endIndex-a.at(-1)?.endIndex;
+ if(!Number.isInteger(delta)||delta<=0)throw Error('新增範圍無法確認，停止後續寫入。');return {start:placement.anchor,end:placement.anchor+delta,delta};
+}
+export function verifyInsertionProtected(before,after,tabId,placement){
+ if(placement.mode==='end'){
+  const tail=selectedTab(before,tabId).data.body.content.at(-1),empty=cellParagraphText(tail)==='\n'&&!tail.paragraph.positionedObjectIds?.length;return verifyProtected(before,after,tabId,empty?tail.startIndex:placement.anchor+1);
+ }
+ const {start,end,delta}=insertionExtent(before,after,tabId,placement),clone=structuredClone(after),body=selectedTab(clone,tabId).data.body.content;
+ if(body.some(n=>(n.startIndex<start&&n.endIndex>start)||(n.startIndex<end&&n.endIndex>end)))throw Error('新增範圍跨到原有段落，停止後續寫入。');
+ selectedTab(clone,tabId).data.body.content=body.filter(n=>n.endIndex<=start).concat(body.filter(n=>n.startIndex>=end).map(n=>shiftBodyIndices(n,-delta)));
+ verifyProtected(before,clone,tabId,Infinity);
+}
+export function insertedRecordTable(before,after,tabId,placement){
+ if(placement.mode==='end')return newTable(after,tabId,placement.anchor);
+ const {start,end}=insertionExtent(before,after,tabId,placement),tables=selectedTab(after,tabId).data.body.content.filter(n=>n.table&&n.startIndex>start&&n.endIndex<=end);
+ if(tables.length!==1)throw Error('新增日期表格無法唯一辨識，停止後續寫入。');return tables[0];
+}
+export function assertRecordInsertion(requests,tabId,{placement,headingText,table=null,plan=null}){
+ const anchor=placement.anchor,titleEnd=anchor+headingText.length;
+ assertAppendOnly(requests,tabId,table?table.startIndex:anchor,anchor+1);
+ const max=table?table.endIndex+plan.rows.flat().reduce((n,c)=>n+c.length,0):titleEnd;
+ for(const request of requests){const [kind]=Object.keys(request),v=request[kind];
+  if(kind==='insertTable'){
+   if(table||v.rows!==plan.rows.length||v.columns!==2)throw Error('拒絕新增範圍外的表格指令。');
+   if(placement.mode==='before'?(v.location?.index!==titleEnd||v.endOfSegmentLocation):(!v.endOfSegmentLocation||v.location))throw Error('拒絕不明表格插入位置。');continue;
+  }
+  if(kind==='createNamedRange'){if(v.range.startIndex!==anchor+1||v.range.endIndex!==titleEnd)throw Error('拒絕範圍外的完成標記。');continue;}
+  if(!table&&kind==='insertText'){if(v.location.index!==anchor||v.text!==headingText)throw Error('拒絕標題範圍外的文字插入。');continue;}
+  const range=v.range;if(range){if(!Number.isInteger(range.endIndex)||range.startIndex<(table?table.startIndex:anchor+1)||range.endIndex>max||range.endIndex<=range.startIndex)throw Error('拒絕修改原有紀錄範圍。');}
+  else if(v.location){if(!table||v.location.index<table.startIndex||v.location.index>=table.endIndex)throw Error('拒絕在原有紀錄插入內容。');}
+  else{const at=v.tableStartLocation||v.tableRange?.tableCellLocation?.tableStartLocation;if(!table||at?.index!==table.startIndex)throw Error('拒絕修改原有表格。');}
  }
 }

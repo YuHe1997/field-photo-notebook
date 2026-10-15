@@ -91,9 +91,9 @@ header>h1{margin-bottom:8px}#tutorial{margin-bottom:12px}main>section>h2{margin-
 
 /* Taste Skill / minimalist-ui: paint-only restyle. Keep all layout metrics and camera chrome. */
 :root{
- --ui-canvas:#f7f7f4;--ui-surface:#ffffff;--ui-soft:#eef1eb;
- --ui-ink:#303a34;--ui-muted:#58635d;--ui-line:#d8ddd7;--ui-control:#87938b;
- --ui-accent:#e5ece0;--ui-accent-ink:#344b36;--ui-focus:#587453;
+ --ui-canvas:#f5f5f0;--ui-surface:#ffffff;--ui-soft:#e7eee2;
+ --ui-ink:#303a34;--ui-muted:#58635d;--ui-line:#bfcdbb;--ui-control:#87938b;
+ --ui-accent:#dce8d3;--ui-accent-ink:#344b36;--ui-focus:#47664c;
  --ui-warning:#754e20;--ui-warning-bg:#faf1df;
  color:var(--ui-ink);background:var(--ui-canvas);
 }
@@ -126,5 +126,13 @@ input[readonly],#photoDrivePath,#monitoringDrivePath{background:var(--ui-soft);c
 #photos .photo-compose-hint,.export-note{color:var(--ui-muted)}
 .group-photos img,#order img,.card img{background:var(--ui-soft)}
 input::placeholder,textarea::placeholder{color:var(--ui-muted);opacity:1}
+/* Moderate (5/10) restraint: clearer grouping and action hierarchy, same layout. */
+header{box-shadow:inset 0 -1px 0 var(--ui-line)}
+article,#monForm fieldset{box-shadow:0 2px 8px rgba(42,58,42,.04)}
+#monForm legend{background:#f0f4eb;border-radius:4px}
+#fillMonTemplate,#connectDrive,#checkMaster{background:#edf3e7;border-color:#7c9474}
+#appendMaster,#uploadPhotosToDrive,#installHomeScreen{background:#47664c;color:#fff;border-color:#47664c}
+@media (hover:hover){#appendMaster:hover:enabled,#uploadPhotosToDrive:hover:enabled,#installHomeScreen:hover:enabled{background:#38553d}}
+#appendMaster:active:enabled,#uploadPhotosToDrive:active:enabled,#installHomeScreen:active:enabled{background:#304b35}
 @media (prefers-reduced-motion:reduce){button:not(.camera-overlay *){transition:none}}
 

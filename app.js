@@ -5,7 +5,6 @@ import {preparePhotoGroups,photoTableDocx,tablePlan,monitoringDocx,monitoringRow
 import {
   MON_FIELDS,
   monKey,
-  genericMonTemplate,
   MonitoringDraftManager,
   formatMonDate,
   safeGetLocalStorage
@@ -590,7 +589,7 @@ async function changeDay(day){
 
   // 2. Protect transition and handle rapid switches with generation token
   const currentSwitch = ++daySwitchGeneration;
-  dayTransitioning = true;
+  dayTransitioning = true;monitoringControls();
 
   edit=null;
   editBaseline=null;
@@ -608,12 +607,12 @@ async function changeDay(day){
     if(currentSwitch !== daySwitchGeneration){
       return;
     }
-    dayTransitioning = false;
+    dayTransitioning = false;monitoringControls();
   }
 
   monDisplayedDay = day;
   if($('monForm')) $('monForm').dataset.displayedDay = day;
-  updateMonUI();
+  updateMonUI();monitoringControls();
   say(`已切換工作日 ${day}，其他日期照片仍保留`);
 }
 $('workDay').onchange=()=>run(async()=>{try{await changeDay($('workDay').value);}catch(e){$('workDay').value=activeDay;throw e;}});
@@ -686,7 +685,7 @@ function syncStrataBoth(notifyIfNoChange = false){
 
 function updateMonUI(){
  const d = displayedDay();
- refreshStandaloneOptions();
+ refreshStandaloneOptions();refreshTemplateRestore();
  fillMonInputs(null);
  const data = monDraftManager.getDraft(d);
  if(data){
@@ -863,19 +862,40 @@ $('monOverwriteCorrupt').onclick = () => {
  monDraftManager.forceOverwriteCorrupt(d);
  updateMonStatusUI();
 };
-$('fillMonTemplate').onclick = () => {
- const d = displayedDay();
- const currentInputs = readMonInputs(true);
- const tpl = genericMonTemplate(d);
- const res = monDraftManager.applyTemplate(d, tpl, currentInputs);
- fillMonInputs(res.filled);
- syncStrataBoth(false);
- monDraftManager.setStatus(d, {
-  status: res.statusMsg,
-  isError: !res.saveResult.success,
-  isUnsaved: !res.saveResult.success
- });
- updateMonStatusUI();
+function templateBackup(day){
+ const storage=safeGetLocalStorage(),id=storage?.getItem(`field-mon-template-latest-${day}`);if(!id)return null;
+ if(!id.startsWith(`field-mon-template-backup-${day}-`))throw Error('表單備份索引異常，未還原。');
+ const backup=JSON.parse(storage.getItem(id)||'null');if(backup?.day!==day||!Object.keys(MON_FIELDS).every(k=>typeof backup.fields?.[k]==='string'))throw Error('表單備份不完整，未還原。');return backup;
+}
+function refreshTemplateRestore(){try{$('restoreMonTemplate').hidden=!templateBackup(displayedDay());}catch{$('restoreMonTemplate').hidden=false;}}
+function preserveTemplateForm(day,fields){
+ if(!monDraftManager.saveDraft(day,fields).success)throw Error('目前表單未能安全儲存，先處理草稿問題；未取代欄位。');
+ const storage=safeGetLocalStorage();if(!storage)throw Error('無法保存套用前的表單備份，未取代欄位。');
+ const id=`field-mon-template-backup-${day}-${crypto.randomUUID()}`,backup={day,fields,rawDraft:storage.getItem(monKey(day)),createdAt:Date.now()};
+ storage.setItem(id,JSON.stringify(backup));storage.setItem(`field-mon-template-latest-${day}`,id);refreshTemplateRestore();
+}
+$('fillMonTemplate').onclick=async()=>{
+ if(monitoringWorking||uploadingPhotos||dayTransitioning)return;
+ const day=displayedDay(),generation=daySwitchGeneration,current=readMonInputs(true),input=$('masterDocUrl').value.trim(),preferred=$('masterTab').value||null;
+ monitoringWorking=true;monitoringControls();
+ try{
+  if(docsAppendInfo.DOCS_APPEND_BUILD!=='date-order-v1')throw Error('請先安全更新 App，不要清除網站資料。');
+  if(day!==$('workDay').value)throw Error('工作日尚未切換完成，未套用。');
+  if(!validDay(day)||!input)throw Error('請先填入 Google 母表副本網址；多分頁文件請先檢查並選擇分頁。');
+  $('monStatus').textContent='正在唯讀取得母表最後一個監看表格…';
+  const result=await inspectMaster(input);acceptMasterCheck(result,input,preferred);
+  const source=docsAppendInfo.lastMonitoringTemplate(result.document,$('masterTab').value||null);
+  if(generation!==daySwitchGeneration||day!==displayedDay()||JSON.stringify(current)!==JSON.stringify(readMonInputs(true)))throw Error('讀取期間工作日或表單已變更，未取代欄位，請重新操作。');
+  if(!confirm(`套用「${result.file.name}」最後表格（${source.date}）的文字欄位？\n目前表單將先保存備份，日期保留「${current.date}」，照片不帶入。`)){updateMonStatusUI();return;}
+  preserveTemplateForm(day,current);
+  const saved=monDraftManager.saveDraft(day,{...source.fields,date:current.date});fillMonInputs(saved.data);
+  monDraftManager.setStatus(day,{status:saved.success?`已套用母表末筆 ${source.date}；監看日期保留。可在「Word 備份與其他操作」還原套用前表單。`:'已帶入文字，但草稿尚未儲存成功；套用前表單備份已保留，請先備份／處理儲存問題。',isError:!saved.success,isUnsaved:!saved.success});updateMonStatusUI();
+ }catch(e){updateMonStatusUI();$('monStatus').textContent='套用未完成：'+e.message;say('套用未完成：'+e.message);}
+ finally{monitoringWorking=false;monitoringControls();}
+};
+$('restoreMonTemplate').onclick=()=>{
+ if(monitoringWorking||uploadingPhotos||dayTransitioning)return;
+ try{const day=displayedDay(),backup=templateBackup(day);if(!backup)throw Error('沒有此工作日的表單備份。');if(!confirm('還原上一份表單備份？目前表單也會先另存備份；不改動照片或母表。'))return;preserveTemplateForm(day,readMonInputs(true));const saved=monDraftManager.saveDraft(day,backup.fields);fillMonInputs(saved.data);updateMonStatusUI();}catch(e){say('還原未完成：'+e.message);}
 };
 // The offline download and Drive export use the same committed snapshot preparation.
 async function prepareMonitoringDay({day=displayedDay(),formData=readMonInputs()}={}){
@@ -890,7 +910,7 @@ function refreshStandaloneOptions(){
  const day=displayedDay()||'',input=$('masterStandaloneName'),enabled=$('masterStandalone').checked;
  if(input.dataset.workDay!==day){input.value=standaloneNames.has(day)?standaloneNames.get(day):`施工監看紀錄-${day}`;input.dataset.workDay=day;}
  $('masterStandaloneOptions').hidden=!enabled;$('masterStandalone').setAttribute('aria-expanded',String(enabled));
- const busy=monitoringWorking||uploadingPhotos;
+ const busy=monitoringWorking||uploadingPhotos||dayTransitioning;
  input.disabled=$('browseMonitoringDriveFolders').disabled=busy||!enabled;
 }
 $('masterStandalone').addEventListener('change',()=>refreshStandaloneOptions());
@@ -899,10 +919,10 @@ function showDailySource(sourceId){
  const link=document.createElement('a');link.href=`https://docs.google.com/document/d/${encodeURIComponent(sourceId)}/edit`;link.target='_blank';link.rel='noopener noreferrer';link.textContent='開啟當日獨立 Google 文件';$('driveResult').replaceChildren(link);
 }
 function monitoringControls(){
- const busy=monitoringWorking||uploadingPhotos;
- for(const id of ['exportMonDocx','uploadDrive','uploadPhotosToDrive','browseMonitoringDriveFolders','browseDriveFolders','driveFolder','photoDriveFolder','monitoringAutoDailySubfolder','autoDailySubfolder','connectDrive','switchGoogleAccount','masterDocUrl','masterTab','checkMaster','masterStandalone'])$(id).disabled=busy;
+ const busy=monitoringWorking||uploadingPhotos||dayTransitioning;
+ for(const id of ['exportMonDocx','uploadDrive','uploadPhotosToDrive','browseMonitoringDriveFolders','browseDriveFolders','driveFolder','photoDriveFolder','monitoringAutoDailySubfolder','autoDailySubfolder','connectDrive','switchGoogleAccount','masterDocUrl','masterTab','checkMaster','masterStandalone','fillMonTemplate','restoreMonTemplate'])$(id).disabled=busy;
  refreshStandaloneOptions();
- $('appendMaster').disabled=busy||!masterReady()||!validDay(displayedDay());$('openMaster').disabled=busy||!checkedMaster;
+ $('appendMaster').disabled=busy||!masterReady()||!validDay(displayedDay())||displayedDay()!==$('workDay').value;$('openMaster').disabled=busy||!checkedMaster;
 }
 $('exportMonDocx').onclick=async()=>{
  if(monitoringWorking||uploadingPhotos)return;monitoringWorking=true;monitoringControls();
@@ -1152,7 +1172,7 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
-if($('masterBuild'))$('masterBuild').textContent=`App v28 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+if($('masterBuild'))$('masterBuild').textContent=`App v29 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
 $('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}
@@ -1168,28 +1188,33 @@ function masterTitleNotice(){
 $('masterTab').addEventListener('change',()=>{try{$('masterStatus').textContent=masterTitleNotice();}catch(e){$('masterStatus').textContent=e.message;}monitoringControls();});
 $('switchGoogleAccount').addEventListener('click',()=>{checkedMaster=null;$('masterStatus').textContent='帳號切換後請重新檢查母檔。';});
 $('openMaster').onclick=()=>{if(checkedMaster)window.open(`https://docs.google.com/document/d/${encodeURIComponent(checkedMaster.file.id)}/edit`,'_blank','noopener,noreferrer');};
+function acceptMasterCheck(result,input,preferred=null){
+ checkedMaster={...result,input};$('masterTab').replaceChildren();
+ if(result.tabs.length>1){const option=document.createElement('option');option.value='';option.textContent='請選擇要追加的分頁';$('masterTab').append(option);}
+ for(const tab of result.tabs){const option=document.createElement('option');option.value=tab.id||'';option.textContent=tab.title;$('masterTab').append(option);}
+ if(preferred&&result.tabs.some(t=>t.id===preferred))$('masterTab').value=preferred;
+ $('masterTabLabel').hidden=result.tabs.length<=1;try{safeGetLocalStorage()?.setItem(MASTER_TARGET_KEY,input);}catch{}
+}
 $('checkMaster').onclick=async()=>{
  if(monitoringWorking||uploadingPhotos)return;
  const input=$('masterDocUrl').value.trim();checkedMaster=null;monitoringWorking=true;monitoringControls();
  try{
   $('masterStatus').textContent='正在唯讀檢查格式、編輯權限與分頁…';
-  const result=await inspectMaster(input);checkedMaster={...result,input};$('masterTab').replaceChildren();
-  if(result.tabs.length>1){const option=document.createElement('option');option.value='';option.textContent='請選擇要追加的分頁';$('masterTab').append(option);}
-  for(const tab of result.tabs){const option=document.createElement('option');option.value=tab.id||'';option.textContent=tab.title;$('masterTab').append(option);}
-  $('masterTabLabel').hidden=result.tabs.length<=1;
-  try{safeGetLocalStorage()?.setItem(MASTER_TARGET_KEY,input);}catch{}
+  const result=await inspectMaster(input);acceptMasterCheck(result,input);
   $('masterStatus').textContent=`可追加：${result.file.name}。${masterTitleNotice()}尚未修改任何內容。`;
  }catch(e){checkedMaster=null;$('masterStatus').textContent=`檢查失敗：${e.message}（未修改文件）`;}
  finally{monitoringWorking=false;monitoringControls();}
 };
 $('appendMaster').onclick=async()=>{
- if(monitoringWorking||uploadingPhotos||!masterReady())return;
- if(docsAppendInfo.DOCS_APPEND_BUILD!=='mother-title-v1'){$('masterStatus').textContent='追加核心仍是舊版，尚未寫入。請使用「更新 App 程式」連結，不要清除網站資料。';return;}
+ if(monitoringWorking||uploadingPhotos||dayTransitioning||!masterReady())return;
+ if(docsAppendInfo.DOCS_APPEND_BUILD!=='date-order-v1'){$('masterStatus').textContent='追加核心仍是舊版，尚未寫入。請使用「更新 App 程式」連結，不要清除網站資料。';return;}
  if(!navigator.locks?.request){$('masterStatus').textContent='此瀏覽器沒有多分頁防重複鎖，暫不追加；當日 Word 與獨立 Google 文件仍可匯出。';return;}
  const target={id:checkedMaster.file.id,name:checkedMaster.file.name,tabId:$('masterTab').value||null,parent:checkedMaster.file.parents?.[0]||null};
  const batch={day:displayedDay(),formData:readMonInputs()};
- let placement,placementLabel;
+ let placement,placementLabel,recordDate;
  try{
+  recordDate=docsAppendInfo.parseMonitoringDate(batch.formData.date);
+  if(batch.day!==$('workDay').value)throw Error('工作日尚未切換完成，請稍候。');
   if(!validDay(batch.day))throw Error('工作日尚未載入，請稍候再操作。');
   refreshStandaloneOptions();
   if($('masterStandalone').checked){
@@ -1198,7 +1223,7 @@ $('appendMaster').onclick=async()=>{
    placementLabel=`獨立文件：${placement.name}\n資料夾：${$('monitoringDrivePath').value||'已選資料夾'}`;
   }else{placement={custom:false,folderId:target.parent,name:`施工監看紀錄-${batch.day}`};placementLabel=`追加來源保留於${target.parent?'母檔資料夾':'我的雲端硬碟'}：${placement.name}`;}
  }catch(e){$('masterStatus').textContent=`尚未寫入：${e.message}`;return;}
- if(!confirm(`將 ${batch.day} 紀錄追加至「${target.name}」末尾。\n${placementLabel}\n請確認這是測試副本；原有內容不刪除、不覆寫。是否繼續？`))return;
+ if(!confirm(`依監看日期 ${recordDate} 插入「${target.name}」；同日已有紀錄即停止。\n${recordDate!==batch.day?`注意：目前工作日為 ${batch.day}，照片仍取該工作日；補登前請確認工作日正確。\n`:''}${placementLabel}\n請確認這是測試副本；原有內容不刪除、不覆寫。是否繼續？`))return;
  let masterWriteAttempted=false;
  monitoringWorking=true;monitoringControls();$('driveResult').replaceChildren();
  try{
@@ -1212,6 +1237,7 @@ $('appendMaster').onclick=async()=>{
    const key=`${target.id}:${target.tabId||''}:${day}:${fingerprint}`,{data}=masterJournal(),previous=data[key];
    for(const record of Object.values(data))if(record.masterId===target.id&&(record.tabId||null)===target.tabId&&!['verified','source-ready','source-uploading'].includes(record.phase))throw Error('此母檔有未確認完成的操作。請先開啟母檔核對；不自動重試，也不要清除網站資料。');
    if(previous&&previous.phase!=='source-ready')throw Error(previous.phase==='verified'?'相同內容已完成追加，不會重複加入。':'先前上傳結果未確認，請核對 Drive；不自動重新上傳。');
+   const fresh=await inspectMaster(target.id);docsAppendInfo.chronologicalPlacement(fresh.document,target.tabId,recordDate);
    let sourceId=previous?.sourceId;
    if(previous){
     if(typeof sourceId!=='string'||!sourceId)throw Error('既有來源的操作紀錄不完整，請先核對，不重新上傳。');
@@ -1229,8 +1255,8 @@ $('appendMaster').onclick=async()=>{
     saveMasterJournal(key,{phase:'source-ready',masterId:target.id,tabId:target.tabId,sourceId,day,fingerprint,sourcePlacement:placement});
    }
    showDailySource(sourceId);
-   const result=await appendMonitoringRecord({masterId:target.id,tabId:target.tabId,sourceId,day,fingerprint,rowLayout,onProgress:phase=>{$('masterStatus').textContent=`${phase}…請勿關閉頁面。`;},onJournal:entry=>{saveMasterJournal(key,{...entry,...(journalPlacement?{sourcePlacement:journalPlacement}:{})});masterWriteAttempted=true;}});
-   $('masterStatus').textContent=`已追加 ${day}：${result.rows} 列、${result.images} 張照片。原有內容已比對保留；請開啟副本核對版面。`;
+   const result=await appendMonitoringRecord({masterId:target.id,tabId:target.tabId,sourceId,day,recordDate,fingerprint,rowLayout,onProgress:phase=>{$('masterStatus').textContent=`${phase}…請勿關閉頁面。`;},onJournal:entry=>{saveMasterJournal(key,{...entry,...(journalPlacement?{sourcePlacement:journalPlacement}:{})});masterWriteAttempted=true;}});
+   $('masterStatus').textContent=`已追加監看日期 ${recordDate}（工作日 ${day}）：${result.rows} 列、${result.images} 張照片。原有內容已比對保留；請開啟副本核對版面。`;
   });
  }catch(e){$('masterStatus').textContent=`已停止：${e.message}${masterWriteAttempted?' 如已建立新表格，會保留現況供核對，不刪除、不自動重試。':' 母檔尚未開始寫入，不需刪除任何表格。'}`;}
  finally{monitoringWorking=false;monitoringControls();}
