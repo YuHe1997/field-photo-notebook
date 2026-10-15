@@ -1,11 +1,12 @@
-<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>現地照片筆記｜安全更新</title><style>body{font:18px/1.65 system-ui,sans-serif;max-width:650px;margin:28px auto;padding:0 20px;background:#faf9f4;color:#214c43}button,a{font:inherit}button{padding:12px 18px;border:1px solid #66887c;border-radius:9px;background:white;color:inherit}#status{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#175b4e}small{display:block}</style><h1>安全更新 App</h1><p>請在原本使用 App 的同一個瀏覽器／入口開啟此頁。不要切換到無痕模式或另一個瀏覽器；主畫面版可能使用不同儲存空間。先完成拍照、上傳或匯出，並確認草稿已儲存，再按更新。</p><p><strong>不清除照片、紀錄集、草稿或操作紀錄。</strong>只更新程式快取；Google 登入可能需要重新操作。不要刪除網站資料或移除主畫面 App。</p><button id="update" type="button">確認已停止操作，安全更新</button><p id="status" role="status" aria-live="polite">尚未更新。</p><p><a id="open" href="./" hidden>開啟更新後的 App</a></p><small>更新工具：20261015-25。此頁不登入 Google，也不讀寫你的文件。</small><script>
+<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>現地照片筆記｜安全更新</title><style>body{font:18px/1.65 system-ui,sans-serif;max-width:650px;margin:28px auto;padding:0 20px;background:#faf9f4;color:#214c43}button,a{font:inherit}button{padding:12px 18px;border:1px solid #66887c;border-radius:9px;background:white;color:inherit}#status{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#175b4e}small{display:block}</style><h1>安全更新 App</h1><p>請在原本使用 App 的同一個瀏覽器／入口開啟此頁。不要切換到無痕模式或另一個瀏覽器；主畫面版可能使用不同儲存空間。先完成拍照、上傳或匯出，並確認草稿已儲存，再按更新。</p><p><strong>不清除照片、紀錄集、草稿或操作紀錄。</strong>只更新程式快取；Google 登入可能需要重新操作。不要刪除網站資料或移除主畫面 App。</p><button id="update" type="button">確認已停止操作，安全更新</button><p id="status" role="status" aria-live="polite">尚未更新。</p><p><a id="open" href="./" hidden>開啟更新後的 App</a></p><small>更新工具：20261015-26。此頁不登入 Google，也不讀寫你的文件。</small><script>
 const status=document.querySelector('#status'),button=document.querySelector('#update'),openApp=document.querySelector('#open');
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function build(worker){
  if(!worker)return null;
  return new Promise(resolve=>{const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();resolve(null);},700);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();resolve(event.data?.cache||null);};try{worker.postMessage({type:'GET_BUILD'},[channel.port2]);}catch{clearTimeout(timer);channel.port1.close();resolve(null);}});
 }
-const modern=value=>/^field-photo-notebook-shell-v\d+$/.test(value||'')&&Number(value.match(/v(\d+)$/)[1])>=25;
+const minimumRelease=Math.max(26,Number(new URL(location.href).searchParams.get('release'))||26);
+const modern=value=>/^field-photo-notebook-shell-v\d+$/.test(value||'')&&Number(value.match(/v(\d+)$/)[1])>=minimumRelease;
 button.onclick=async()=>{
  button.disabled=true;openApp.hidden=true;
  try{

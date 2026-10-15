@@ -1,5 +1,5 @@
 // Pure append-only planning. Never deletes/replaces old document content or changes global styles.
-export const DOCS_APPEND_BUILD='softbreak-v2';
+export const DOCS_APPEND_BUILD='mother-title-v1';
 export function documentTabs(document){
  const out=[];function walk(tabs){for(const tab of tabs||[]){if(tab.documentTab)out.push({id:tab.tabProperties?.tabId,title:tab.tabProperties?.title||'文件',data:tab.documentTab});walk(tab.childTabs);}}
  walk(document.tabs);
@@ -25,6 +25,35 @@ export function appendAnchor(document,tabId){
  const tail=body?.at(-1);
  if(!document.revisionId||!tail?.paragraph||!Number.isInteger(tail.endIndex))throw Error('無法取得母檔版本或安全追加位置。');
  return tail.endIndex-1;
+}
+// Reuse the last recognizable daily-log title in the selected tab, not a company name in code.
+export function masterHeadingTemplate(document,tabId){
+ const data=selectedTab(document,tabId).data,body=data.body?.content||[];
+ const textOf=node=>node?.paragraph&&(node.paragraph.elements||[]).every(e=>e.textRun)?node.paragraph.elements.map(e=>e.textRun.content||'').join(''):null;
+ const linesOf=text=>text.replace(/\u000b/g,'\n').trim().split('\n').map(line=>line.trim()).filter(Boolean);
+ for(let end=body.length-1;end>=0;end--){
+  const last=textOf(body[end]);if(!last||linesOf(last).at(-1)!=='監看工作日誌')continue;
+  // A title must belong to a following table; do not copy an unrelated note elsewhere.
+  let tableFollows=false;for(let i=end+1;i<Math.min(body.length,end+6);i++){if(body[i].table){tableFollows=true;break;}const text=textOf(body[i]);if(text===null||text.trim())break;}
+  if(!tableFollows)continue;
+  const nodes=[];let lineCount=0;
+  for(let i=end;i>=Math.max(0,end-5);i--){const text=textOf(body[i]);if(text===null)break;if(!text.trim())continue;nodes.unshift(body[i]);lineCount+=linesOf(text).length;if(lineCount>=3)break;}
+  const all=nodes.map(textOf).join(''),lines=linesOf(all);
+  if(lines.length!==3||lines[2]!=='監看工作日誌'||!lines[1].includes('監看計畫')||all.length>1500)continue;
+  const stripped=all.match(/[\u0000-\u0008\u000c-\u001f\ue000-\uf8ff]/u);if(stripped)throw Error('母檔標題有不支援的字元，未追加。');
+  const named=(data.namedStyles||document.namedStyles)?.styles||[];
+  const normal=named.find(style=>style.namedStyleType==='NORMAL_TEXT')||{};
+  const paragraphs=nodes.map(node=>{
+   const p=node.paragraph,style=p.paragraphStyle||{},base=named.find(s=>s.namedStyleType===style.namedStyleType)||normal;
+   return {text:textOf(node),paragraphStyle:{...normal.paragraphStyle,...base.paragraphStyle,...style},textStyle:{fontSize:{magnitude:12,unit:'PT'},bold:false,italic:false,underline:false,strikethrough:false,foregroundColor:{color:{rgbColor:{red:0,green:0,blue:0}}},...normal.textStyle,...base.textStyle},runs:p.elements.map(e=>({text:e.textRun.content||'',style:e.textRun.textStyle||{}}))};
+  });
+  return {text:'\n'+all,paragraphs,lines};
+ }
+ return null;
+}
+export function headingRangeText(document,tabId,start,end){
+ let result='';for(const node of selectedTab(document,tabId).data.body.content){if(!node.paragraph)continue;let cursor=node.startIndex;for(const run of node.paragraph.elements||[]){if(!run.textRun)continue;const text=run.textRun.content||'',at=run.startIndex??cursor,last=at+text.length;if(last>start&&at<end)result+=text.slice(Math.max(0,start-at),Math.min(text.length,end-at));cursor=last;}}
+ return result;
 }
 export function namedMarker(document,tabId,name){const ranges=selectedTab(document,tabId).data.namedRanges||document.namedRanges||{};return Object.values(ranges).some(group=>group.name===name||group.namedRanges?.some(r=>r.name===name));}
 // Some Docs import/merge responses are sparse or retain zero-span covered cells.
@@ -102,14 +131,29 @@ export function dailyTablePlan(document,{rowLayout}={}){
  return {columns,rows,rowStyles:source.tableRows.map(row=>row.tableRowStyle||{})};
 }
 const loc=(index,tabId)=>({index,...(tabId?{tabId}:{})});
-export function structureRequests(anchor,tabId,day,pending,rows){
- const text=`\n監看紀錄 ${day}\n`;
- return [{insertText:{location:loc(anchor,tabId),text}},{updateTextStyle:{range:{startIndex:anchor+1,endIndex:anchor+text.length-1,...(tabId?{tabId}:{})},textStyle:{fontSize:{magnitude:12,unit:'PT'},bold:true},fields:'fontSize,bold'}},{createNamedRange:{name:pending,range:{startIndex:anchor+1,endIndex:anchor+text.length,...(tabId?{tabId}:{})}}},{insertTable:{rows,columns:2,endOfSegmentLocation:tabId?{tabId}:{}}}];
+export function structureRequests(anchor,tabId,day,pending,rows,heading=null){
+ const text=heading?.text||`\n監看紀錄 ${day}\n`,requests=[{insertText:{location:loc(anchor,tabId),text}}];
+ const range=(startIndex,endIndex)=>({startIndex,endIndex,...(tabId?{tabId}:{})});
+ if(heading){
+  let offset=1;
+  for(const paragraph of heading.paragraphs){
+   const start=anchor+offset,end=start+paragraph.text.length;
+   const pStyle=pick(paragraph.paragraphStyle,['namedStyleType','alignment','lineSpacing','spaceAbove','spaceBelow','indentStart','indentEnd','indentFirstLine','keepWithNext','avoidWidowAndOrphan','pageBreakBefore']);
+   if(!pStyle.alignment)pStyle.alignment='CENTER';
+   requests.push({updateParagraphStyle:{range:range(start,end),paragraphStyle:pStyle,fields:Object.keys(pStyle).join(',')}});
+   const textStyle=pick(paragraph.textStyle,['bold','italic','underline','strikethrough','fontSize','weightedFontFamily','foregroundColor','backgroundColor','baselineOffset']);
+   requests.push({updateTextStyle:{range:range(start,end),textStyle,fields:Object.keys(textStyle).join(',')}});
+   let runOffset=0;for(const run of paragraph.runs){const style=pick(run.style,['bold','italic','underline','strikethrough','fontSize','weightedFontFamily','foregroundColor','backgroundColor','baselineOffset']);if(run.text.length&&Object.keys(style).length)requests.push({updateTextStyle:{range:range(start+runOffset,start+runOffset+run.text.length),textStyle:style,fields:Object.keys(style).join(',')}});runOffset+=run.text.length;}
+   offset+=paragraph.text.length;
+  }
+ }else requests.push({updateTextStyle:{range:range(anchor+1,anchor+text.length-1),textStyle:{fontSize:{magnitude:12,unit:'PT'},bold:true},fields:'fontSize,bold'}});
+ requests.push({createNamedRange:{name:pending,range:range(anchor+1,anchor+text.length)}},{insertTable:{rows,columns:2,endOfSegmentLocation:tabId?{tabId}:{}}});
+ return requests;
 }
 export function newTable(document,tabId,anchor){const tables=selectedTab(document,tabId).data.body.content.filter(n=>n.table&&n.startIndex>anchor);if(tables.length!==1)throw Error('新增表格無法唯一辨識，停止，不再寫入。');return tables[0];}
 export function mergeRequests(table,tabId,plan){return plan.rows.flatMap((row,rowIndex)=>row.filter(c=>c.span>1).map(c=>({mergeTableCells:{tableRange:{tableCellLocation:{tableStartLocation:loc(table.startIndex,tabId),rowIndex,columnIndex:c.column},rowSpan:1,columnSpan:c.span}}})));}
 function pick(object,keys){return Object.fromEntries(keys.filter(k=>object[k]!==undefined).map(k=>[k,object[k]]));}
-export function contentRequests(table,tabId,plan,done,anchor,day){
+export function contentRequests(table,tabId,plan,done,anchor,day,heading=null){
  const flat=[];
  if(table.table.tableRows.length!==plan.rows.length)throw Error('新增列數不符，停止。');
  plan.rows.forEach((row,i)=>{
@@ -136,7 +180,7 @@ export function contentRequests(table,tabId,plan,done,anchor,day){
   shift+=source.length;
  }
  for(const [i,style] of (plan.rowStyles||[]).entries())if(style.minRowHeight)requests.push({updateTableRowStyle:{tableStartLocation:loc(table.startIndex,tabId),rowIndices:[i],tableRowStyle:{minRowHeight:style.minRowHeight},fields:'minRowHeight'}});
- const headingLength=`\n監看紀錄 ${day}\n`.length;
+ const headingLength=(heading?.text||`\n監看紀錄 ${day}\n`).length;
  requests.push({createNamedRange:{name:done,range:range(anchor+1,anchor+headingLength)}});
  if(requests.length>9000)throw Error('當日內容過多，停止追加。');return requests;
 }

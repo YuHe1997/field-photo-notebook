@@ -1,5 +1,5 @@
 // User-initiated export only. Access tokens and the GIS client live in memory, never in backups.
-import {documentTabs,selectedTab,appendAnchor,verifyProtected,dailyTablePlan,structureRequests,newTable,mergeRequests,contentRequests,assertAppendOnly,namedMarker,logicalTableCells} from './docs-append.js';
+import {documentTabs,selectedTab,appendAnchor,verifyProtected,dailyTablePlan,structureRequests,newTable,mergeRequests,contentRequests,assertAppendOnly,namedMarker,logicalTableCells,masterHeadingTemplate,headingRangeText} from './docs-append.js';
 export const CLIENT_ID='659642111191-16q64t5mbd32hba7um1gvqd3vmc4tn9p.apps.googleusercontent.com';
 const SCOPE='https://www.googleapis.com/auth/drive';
 const DOCX='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -201,6 +201,7 @@ export async function appendMonitoringRecord({masterId,tabId,sourceId,day,finger
  const source=await readGoogleDocument(sourceId),plan=dailyTablePlan(source,{rowLayout});
  const suffix=`${day}_${fingerprint}`,pending=`fpn_pending_${suffix}`,done=`fpn_done_${suffix}`;
  if(namedMarker(before,tabId,pending)||namedMarker(before,tabId,done))throw new DriveError('duplicate','母檔已有相同內容的追加標記。請開啟文件核對，不會重複追加。');
+ const heading=masterHeadingTemplate(before,tabId);
  const anchor=appendAnchor(before,tabId),tail=selectedTab(before,tabId).data.body.content.at(-1);
  // A trailing empty placeholder may inherit newline styling; never exclude non-empty old text.
  const emptyTail=tail.paragraph.elements.every(e=>e.textRun)&&tail.paragraph.elements.map(e=>e.textRun.content||'').join('')==='\n';
@@ -214,11 +215,13 @@ export async function appendMonitoringRecord({masterId,tabId,sourceId,day,finger
   await docsApi(`https://docs.googleapis.com/v1/documents/${encodeURIComponent(masterId)}:batchUpdate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requests,writeControl:{requiredRevisionId:current.revisionId}})});
   current=await readGoogleDocument(masterId);verifyProtected(before,current,tabId,boundary);
  };
- await write('建立追加表格',structureRequests(anchor,tabId,day,pending,plan.rows.length),anchor);
+ await write('建立追加表格',structureRequests(anchor,tabId,day,pending,plan.rows.length,heading),anchor);
  let table=newTable(current,tabId,anchor),merges=mergeRequests(table,tabId,plan);
  if(merges.length){await write('合併新表格儲存格',merges,table.startIndex);table=newTable(current,tabId,anchor);}
- await write('填入文字與照片',contentRequests(table,tabId,plan,done,anchor,day),table.startIndex);
+ await write('填入文字與照片',contentRequests(table,tabId,plan,done,anchor,day,heading),table.startIndex);
  if(!namedMarker(current,tabId,done))throw new DriveError('api','追加完成標記未確認；請核對母檔，不會自動重試。');
+ const expectedHeading=(heading?.text||`\n監看紀錄 ${day}\n`).slice(1);
+ if(headingRangeText(current,tabId,anchor+1,anchor+1+expectedHeading.length)!==expectedHeading)throw new DriveError('api','新增標題讀回不符，請核對副本；不自動重試。');
  const result=newTable(current,tabId,anchor).table;
  let expectedText='',actualText='',expectedImages=0,actualImages=0;
  for(const row of plan.rows)for(const cell of row){expectedText+=cell.segments.filter(s=>s.kind==='text').map(s=>s.text).join('')+'\n';expectedImages+=cell.segments.filter(s=>s.kind==='image').length;}
