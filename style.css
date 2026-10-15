@@ -89,5 +89,42 @@ header>h1{margin-bottom:8px}#tutorial{margin-bottom:12px}main>section>h2{margin-
 .home-screen-storage-note{padding:12px;border-radius:8px;background:#fff3d6;margin:12px 0;font-size:.9rem}.home-screen-storage-note p{margin:6px 0}
 #homeScreenInstructions,#homeScreenStatus{overflow-wrap:anywhere}#homeScreenUrl{border:1px solid #7c9488;border-radius:6px}#installHomeScreen{background:#164c43;color:white;width:100%}
 
-
+/* Taste Skill / minimalist-ui: paint-only restyle. Keep all layout metrics and camera chrome. */
+:root{
+ --ui-canvas:#f7f7f4;--ui-surface:#ffffff;--ui-soft:#eef1eb;
+ --ui-ink:#303a34;--ui-muted:#58635d;--ui-line:#d8ddd7;--ui-control:#87938b;
+ --ui-accent:#e5ece0;--ui-accent-ink:#344b36;--ui-focus:#587453;
+ --ui-warning:#754e20;--ui-warning-bg:#faf1df;
+ color:var(--ui-ink);background:var(--ui-canvas);
+}
+header{background:var(--ui-soft);color:var(--ui-ink)}
+button:not(.camera-overlay *){background:var(--ui-surface);color:var(--ui-ink);border-color:var(--ui-control);border-radius:6px;box-shadow:none;transition:background-color 120ms ease,border-color 120ms ease,color 120ms ease}
+button[aria-pressed=true]:not(.camera-overlay *){background:var(--ui-accent);color:var(--ui-accent-ink);outline-color:var(--ui-focus)}
+input:not(.camera-overlay *),textarea:not(.camera-overlay *),select:not(.camera-overlay *){accent-color:var(--ui-focus);border-color:var(--ui-control);color:var(--ui-ink)}
+button:focus-visible:not(.camera-overlay *),input:focus-visible:not(.camera-overlay *),textarea:focus-visible:not(.camera-overlay *),select:focus-visible:not(.camera-overlay *),summary:focus-visible:not(.camera-overlay *),a:focus-visible:not(.camera-overlay *){outline:3px solid var(--ui-focus);outline-offset:2px}
+@media (hover:hover){button:hover:enabled:not(.camera-overlay *){background:var(--ui-soft);border-color:var(--ui-focus)}}
+button:active:enabled:not(.camera-overlay *){background:var(--ui-accent)}
+a:not(.camera-overlay *){color:var(--ui-accent-ink)}
+article{background:var(--ui-surface);border-color:var(--ui-line);border-radius:8px}
+.work-days select{background:var(--ui-surface);color:var(--ui-ink);border-color:var(--ui-control)}
+input[readonly],#photoDrivePath,#monitoringDrivePath{background:var(--ui-soft);color:var(--ui-muted);border-color:var(--ui-control)}
+#monForm fieldset{background:var(--ui-surface);border-color:var(--ui-line)}
+#monForm legend,#monStatus{color:var(--ui-accent-ink)}
+#monForm input[type=text],#monForm textarea,#masterStandaloneName,#homeScreenUrl{background:var(--ui-surface);color:var(--ui-ink);border-color:var(--ui-control)}
+#masterExport input,#masterExport select{background:var(--ui-surface);color:var(--ui-ink);border-color:var(--ui-control);border-style:solid;border-radius:6px}
+#homeScreenHelp{background:var(--ui-surface);color:var(--ui-ink);border-color:var(--ui-control)}
+#appendMaster,#uploadPhotosToDrive,#installHomeScreen{background:var(--ui-accent);color:var(--ui-accent-ink);border-color:var(--ui-control)}
+@media (hover:hover){#appendMaster:hover:enabled,#uploadPhotosToDrive:hover:enabled,#installHomeScreen:hover:enabled{background:var(--ui-soft)}}
+#appendMaster:active:enabled,#uploadPhotosToDrive:active:enabled,#installHomeScreen:active:enabled{background:#d5dfcf}
+#exportDialog,#homeScreenDialog{background:var(--ui-canvas);color:var(--ui-ink);border-color:var(--ui-line);border-radius:8px}
+#folderBrowserDialog{background:var(--ui-canvas)!important;color:var(--ui-ink)!important;border-color:var(--ui-line)!important;border-radius:8px!important}
+#exportDialog::backdrop,#homeScreenDialog::backdrop,#folderBrowserDialog::backdrop{background:rgba(38,47,40,.32)}
+.export-topbar{background:var(--ui-canvas);border-color:var(--ui-line)}
+#exportRows li,#unifiedExport,#masterExport,#photoDriveExport,#monitoringOtherExport,#editor{border-color:var(--ui-line)}
+.sync-notice,.home-screen-storage-note{background:var(--ui-warning-bg);color:var(--ui-warning);border-color:var(--ui-line)}
+#status,#exportStatus{color:var(--ui-warning)}#folderBrowserStatus{color:var(--ui-warning)!important}
+#photos .photo-compose-hint,.export-note{color:var(--ui-muted)}
+.group-photos img,#order img,.card img{background:var(--ui-soft)}
+input::placeholder,textarea::placeholder{color:var(--ui-muted);opacity:1}
+@media (prefers-reduced-motion:reduce){button:not(.camera-overlay *){transition:none}}
 
