@@ -77,6 +77,11 @@ header>h1{margin-bottom:8px}#tutorial{margin-bottom:12px}main>section>h2{margin-
 #unifiedExport{margin-top:20px;border-top:1px solid #b8c7be;padding-top:8px}
 #unifiedExport>section{margin-top:16px;padding-top:8px}#unifiedExport h4{margin:8px 0}
 #masterExport{border-top:1px solid #b8c7be}#masterExport input,#masterExport select{width:100%;box-sizing:border-box}#masterExport>button{width:100%}#masterExport details{margin-top:8px}#masterStatus{overflow-wrap:anywhere}#photoDriveExport{border-top:1px solid #b8c7be}#photoDriveExport>button:last-of-type{width:100%}
+/* Screenshot-approved monitoring flow: auth before form; append, optional source, then originals. */
+#monitoringAuth{margin:16px 0 24px}#monitoringAuth .actions>button{flex:1;min-width:min(140px,100%);padding:10px 8px}
+#monitoringAuth p{overflow-wrap:anywhere}#masterStandaloneOptions{margin-top:12px}#masterStandaloneName{width:100%;box-sizing:border-box;border:1px solid #7c9488;border-radius:6px}
+#unifiedExport{border-top:0;padding-top:0}#unifiedExport>#masterExport{border-top:0;margin-top:0}#monitoringOtherExport{margin-top:20px;border-top:1px solid #b8c7be;padding-top:8px}
+.export-note{font-size:.85rem;color:#556a61;overflow-wrap:anywhere}#masterStandaloneOptions .export-note{margin-top:4px}
 .app-title-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.app-title-row h1{margin:8px 0}
 #homeScreenHelp{font-size:.85rem;min-height:40px;padding:6px 10px;background:transparent;color:white;border-color:#8aa99d}
 #homeScreenDialog{box-sizing:border-box;width:calc(100% - 24px);max-width:560px;max-height:85dvh;overflow:auto;padding:16px;border:1px solid #69877c;border-radius:12px;background:#f4f3ed;color:#19332f}

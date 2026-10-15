@@ -127,11 +127,18 @@ export async function verifyFolder(id){
   return file;
  }catch(e){if(e.kind==='api'&&/回報 (403|404)/.test(e.message))throw new DriveError('api','無法存取此資料夾（403/404）。請確認目前 Google 帳號擁有資料夾的編輯權限，並已允許 App 存取 Google Drive。');throw e;}
 }
-export async function uploadDayDoc(day,docBlob,folderId=null){
+export function validateGoogleDocName(value){
+ if(typeof value!=='string'||!value.trim())throw new DriveError('input','請輸入獨立文件名稱。');
+ const name=value.trim();
+ if(name.length>128||/[\u0000-\u001f\u007f]/u.test(name))throw new DriveError('input','文件名稱請使用 128 字元內的單行文字，不可包含控制字元。');
+ return name;
+}
+export async function uploadDayDoc(day,docBlob,folderId=null,{name:customName}={}){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new DriveError('input','工作日格式無效。');
+ const name=customName===undefined?`施工監看紀錄-${day}`:validateGoogleDocName(customName);
  if(folderId)await verifyFolder(folderId);
  const boundary=`fieldPhotoNotebook_${crypto.randomUUID().replaceAll('-','')}`;
- const meta={name:`施工監看紀錄-${day}`,mimeType:GOOGLE_DOC};if(folderId)meta.parents=[folderId];
+ const meta={name,mimeType:GOOGLE_DOC};if(folderId)meta.parents=[folderId];
  const body=new Blob([`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: ${DOCX}\r\n\r\n`,docBlob,`\r\n--${boundary}--\r\n`]);
  const file=await api('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,parents&supportsAllDrives=true',{
   method:'POST',headers:{'Content-Type':`multipart/related; boundary=${boundary}`},body
