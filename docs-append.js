@@ -72,7 +72,14 @@ export function dailyTablePlan(document,{rowLayout}={}){
     if(!e.paragraph||e.paragraph.bullet)throw Error('儲存格有巢狀表格／項目清單等不支援結構，未追加。');
     const start=offset;
     for(const run of e.paragraph.elements||[]){
-     if(run.textRun){const text=run.textRun.content||'';if(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ue000-\uf8ff]/u.test(text))throw Error('文字含 Docs API 會移除的字元，未追加。');segments.push({kind:'text',text,style:run.textRun.textStyle||{},offset});offset+=text.length;}
+     if(run.textRun){
+      const text=run.textRun.content||'';
+      // Docs preserves U+000B soft line breaks. Its documented stripped ranges start at U+000C,
+      // not U+000B. Keep soft breaks verbatim so UTF-16 indices and paragraph styles stay intact.
+      const removed=text.match(/[\u0000-\u0008\u000c-\u001f\ue000-\uf8ff]/u);
+      if(removed){const code='U+'+removed[0].codePointAt(0).toString(16).toUpperCase().padStart(4,'0');throw Error(`第 ${rowIndex+1} 列第 ${column+1} 欄含 Docs API 會移除的字元（${code}），未追加；原文字保留。`);}
+      segments.push({kind:'text',text,style:run.textRun.textStyle||{},offset});offset+=text.length;
+     }
      else if(run.inlineObjectElement){
       const object=data.inlineObjects?.[run.inlineObjectElement.inlineObjectId]?.inlineObjectProperties?.embeddedObject;
       const uri=object?.imageProperties?.contentUri;
