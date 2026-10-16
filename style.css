@@ -148,4 +148,8 @@ article,#monForm fieldset{box-shadow:0 2px 8px rgba(42,58,42,.04)}
 .master-document-choice{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--ui-line)}
 .master-document-choice>span{min-width:0;overflow-wrap:anywhere}
 .master-document-choice>button{flex-shrink:0}
+.photo-area-reference{font-size:.88rem;line-height:1.45;overflow-wrap:anywhere;border-left:3px solid var(--ui-control);padding-left:8px;margin:8px 0}
+.photo-area-reference p{margin:5px 0}
+.photo-area-reference summary{padding:5px 0;font-size:.82rem}
+.photo-area-reference details{color:var(--ui-ink)}
 
