@@ -152,4 +152,11 @@ article,#monForm fieldset{box-shadow:0 2px 8px rgba(42,58,42,.04)}
 .photo-area-reference p{margin:5px 0}
 .photo-area-reference summary{padding:5px 0;font-size:.82rem}
 .photo-area-reference details{color:var(--ui-ink)}
+.phrase-panel{margin:8px 0 14px;padding:0 10px;border:1px solid var(--ui-line);border-radius:9px;background:var(--ui-soft);overflow-wrap:anywhere}
+.phrase-panel>summary{font-size:.94rem;padding:10px 0;min-height:24px}
+.phrase-panel p{font-size:.88rem;margin:8px 0}
+.phrase-options{display:flex;flex-direction:column;gap:8px;margin:8px 0 12px;max-height:360px;overflow:auto}
+.phrase-choice{display:block;text-align:left;width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+.phrase-choice small{display:block;font-size:.8rem;color:var(--ui-muted);margin-top:4px}
+.phrase-panel .actions{margin-top:8px}
 

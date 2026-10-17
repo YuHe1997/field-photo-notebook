@@ -18,6 +18,7 @@ import {
   handleWorkScopeKeyDown
 } from './mon-numbering.js';
 import {compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,previewRotation,zoomCapability,snapZoom,cropRect,focusCapabilities,mapPreviewTapToSensor,deriveCameraBearing} from './core.js';
+import {WorkPhrasePicker,readPhraseMetadata,photoEngineeringPhrases,readSavedScopePhrases,phraseInsertion} from './work-phrases.js';
 import {AREA_DATA} from './area-data.js';
 import {createAreaMatcher,areaReferenceText} from './area-reference.js';
 let areaMatcher;try{areaMatcher=createAreaMatcher(AREA_DATA);}catch{areaMatcher=()=>({status:'unavailable',reason:'dataset-invalid',candidates:[],datasetVersion:AREA_DATA?.version});}
@@ -39,6 +40,8 @@ const DAY_KEY='field-photo-notebook-work-days';
 function readDays(){try{const s=safeGetLocalStorage();const d=JSON.parse(s?.getItem(DAY_KEY)||'{}');return {active:validDay(d.active)?d.active:null,days:Array.isArray(d.days)?d.days.filter(validDay):[]};}catch{return {active:null,days:[]};}}
 let dayState=readDays(),activeDay=dayState.active;
 let monDisplayedDay=null,daySwitchGeneration=0,dayTransitioning=false;
+let photoPhrasePicker=null,scopePhrasePicker=null;
+function closePhrasePickers(){photoPhrasePicker?.invalidate();scopePhrasePicker?.invalidate();}
 function displayedDay(){return monDisplayedDay||$('monForm')?.dataset?.displayedDay||activeDay;}
 const previewCache=new Map(),rotations=new Map();
 function rememberDay(day){const next={active:day,days:[...new Set([...dayState.days,day])].sort()};try{safeGetLocalStorage()?.setItem(DAY_KEY,JSON.stringify(next));}catch{}dayState=next;activeDay=day;}
@@ -174,7 +177,7 @@ function sensors(){
   }
 }
 setInterval(sensors,1000);
-function tab(name){if(name==='editor'&&!edit)return;if(name!=='camera')stop();active=name;for(const n of ['camera','photos','groups','monitoring'])$(n).hidden=n!==name;$('editor').hidden=name!=='editor'||!edit;$('editingTab').hidden=$('appendToEditor').hidden=!edit;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.tab===name));if(name==='editor'){renderOrder();$('editor').scrollIntoView({block:'start'});const h=$('editor').querySelector('h2');h.tabIndex=-1;h.focus({preventScroll:true});}if(name==='monitoring')updateMonUI();}
+function tab(name){if(name==='editor'&&!edit)return;closePhrasePickers();if(name!=='camera')stop();active=name;for(const n of ['camera','photos','groups','monitoring'])$(n).hidden=n!==name;$('editor').hidden=name!=='editor'||!edit;$('editingTab').hidden=$('appendToEditor').hidden=!edit;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.tab===name));if(name==='editor'){renderOrder();$('editor').scrollIntoView({block:'start'});const h=$('editor').querySelector('h2');h.tabIndex=-1;h.focus({preventScroll:true});}if(name==='monitoring')updateMonUI();}
 window.tab=tab;
 document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
 function currentCamera(session){return session===cameraSession&&active==='camera'&&!document.hidden;}
@@ -596,7 +599,7 @@ async function changeDay(day){
   if(!validDay(day))throw Error('日期請使用有效 YYYY-MM-DD');
   if(busy||pending.length||rotating)throw Error('請先完成照片儲存或旋轉再切換工作日');
   if(!canDiscardEditor()){$('workDay').value=activeDay;return;}
-  stop();
+  stop();closePhrasePickers();
 
   // 1. Bind form saves to currently displayed day: flush pending edits before transition
   const prevDisplayed = monDisplayedDay;
@@ -739,10 +742,10 @@ $('monForm').addEventListener('input', (e) => {
   }
  }
 });
-let isTransientOffer = false;
+let isTransientOffer = false,suppressScopeOffer=false;
 
 $('monWorkScope').addEventListener('focus', () => {
- if($('monWorkScope').value === ''){
+ if(!suppressScopeOffer&&$('monWorkScope').value === ''){
   isTransientOffer = true;
   $('monWorkScope').value = '1. ';
   $('monWorkScope').setSelectionRange(3, 3);
@@ -839,6 +842,40 @@ $('addChildItem').onclick = () => {
  ta.dispatchEvent(new Event('input', {bubbles: true}));
  syncStrataBoth(false);
 };
+function phraseContext(kind){
+ const day=displayedDay();
+ if(dayTransitioning||!validDay(day)||day!==activeDay||day!==$('workDay').value||$('monForm').dataset.displayedDay!==day||monitoringWorking||uploadingPhotos)return null;
+ if(kind==='monitoring'){if($('monitoring').hidden)return null;return {day,key:`monitoring:${day}:${daySwitchGeneration}`};}
+ if(!edit||$('editor').hidden||(edit.workDay??workDayOf(photos.find(p=>p.id===edit.photoIds[0])??{}))!==day||!edit.photoIds.every(id=>photos.some(p=>p.id===id&&workDayOf(p)===day)))return null;
+ return {day,key:JSON.stringify(['engineering',day,daySwitchGeneration,edit.id,edit.photoIds])};
+}
+function applyWorkPhrase(target,phrase,before,scope){
+ const plan=phraseInsertion(before.value,before.start,before.end,phrase,{scope});
+ suppressScopeOffer=true;
+ try{target.focus();target.setSelectionRange(plan.start,plan.end);insertTextAtCaret(target,plan.text);}
+ finally{suppressScopeOffer=false;}
+ if(scope)isTransientOffer=false;
+ target.dispatchEvent(new Event('input',{bubbles:true}));return plan;
+}
+function restoreWorkPhrase(target,x,scope){
+ suppressScopeOffer=true;
+ try{target.focus();target.setSelectionRange(x.start,x.start+x.length);insertTextAtCaret(target,'');target.setSelectionRange(x.before.start,x.before.end);}
+ finally{suppressScopeOffer=false;}
+ if(scope)isTransientOffer=false;target.dispatchEvent(new Event('input',{bubbles:true}));
+}
+function phrasePickerElements(prefix,panel,target){return {panel:$(panel),search:$(prefix+'PhraseSearch'),list:$(prefix+'PhraseList'),status:$(prefix+'PhraseStatus'),refresh:$('refresh'+(prefix==='photo'?'Photo':'Scope')+'Phrases'),undo:$('undo'+(prefix==='photo'?'Photo':'Scope')+'Phrase'),target:$(target)};}
+photoPhrasePicker=new WorkPhrasePicker({
+ ...phrasePickerElements('photo','photoPhrasePanel','monWorkScope'),getContext:()=>phraseContext('monitoring'),
+ loadSource:async c=>{const snapshot=await readPhraseMetadata(await db.open()),choices=photoEngineeringPhrases(snapshot,c.day);return {choices,revision:JSON.stringify(choices.map(p=>[p.text,p.revision])),emptyMessage:'本工作日尚無已儲存的照片工程描述；請先儲存紀錄集。'};},
+ apply:(p,b)=>applyWorkPhrase($('monWorkScope'),p,b,true),restore:x=>restoreWorkPhrase($('monWorkScope'),x,true),
+ successMessage:()=>monDraftManager.hasUnsaved(displayedDay())?'已插入，可修改；草稿尚未安全儲存，請先重試或匯出備份。':'已插入並自動儲存草稿，可再修改；來源紀錄集未改動。'
+});
+scopePhrasePicker=new WorkPhrasePicker({
+ ...phrasePickerElements('scope','scopePhrasePanel','engineering'),getContext:()=>phraseContext('engineering'),
+ loadSource:async c=>{if(monDraftManager.hasUnsaved(c.day)||monDraftManager.hasCorrupt(c.day)||monDraftManager.hasConflict(c.day)||monDraftManager.isReadBlocked(c.day))throw Error('本工作日監看草稿尚未安全儲存，請先重試儲存或匯出備份；不使用舊草稿冒充最新內容');return {...readSavedScopePhrases(safeGetLocalStorage(),c.day),emptyMessage:'本工作日尚無已儲存的 (1) 作業子項目；主標題不會當成片語。'};},
+ apply:(p,b)=>applyWorkPhrase($('engineering'),p,b,false),restore:x=>restoreWorkPhrase($('engineering'),x,false),
+ successMessage:()=> '已插入，可再修改；請按「儲存紀錄集」。來源監看表單未改動。'
+});
 $('syncStrata').onclick = () => {
  syncStrataBoth(true);
 };
@@ -1205,7 +1242,7 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
-if($('masterBuild'))$('masterBuild').textContent=`App v31 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+if($('masterBuild'))$('masterBuild').textContent=`App v32 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
 $('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}
