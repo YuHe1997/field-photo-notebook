@@ -62,34 +62,34 @@ export class WorkPhrasePicker{
   target.addEventListener('compositionstart',()=>{this.composing=true;});target.addEventListener('compositionend',()=>{this.composing=false;});target.addEventListener('input',()=>this.updateUndo());
  }
  contextMatches(c){const now=this.getContext();return !!c&&!!now&&c.key===now.key;}
- message(s){this.status.textContent=s;}
+ message(s,quiet=false){this.status.textContent=s;this.status.hidden=!s;this.status.classList.toggle('sr-only',quiet);}
  invalidate(close=true){this.sequence++;this.source=null;this.lastInsert=null;this.busy=false;this.list.replaceChildren();this.updateUndo();if(close)this.panel.open=false;}
  async reload(){
-  const seq=++this.sequence,c=this.getContext();this.busy=false;this.source=null;this.updateUndo();this.list.replaceChildren();if(!c){this.message('請先完成工作日切換或開啟記事。');return;}this.message('正在讀取本工作日已儲存內容…');
-  try{const source=await this.loadSource(c);if(seq!==this.sequence||!this.panel.open||!this.contextMatches(c))return;this.source={...source,context:c};this.message(source.choices.length?`工作日 ${c.day} · ${source.choices.length} 段片語；相同文字合併顯示。`:source.emptyMessage||'本工作日尚無已儲存的片語來源。');this.render();}
+  const seq=++this.sequence,c=this.getContext();this.busy=false;this.source=null;this.updateUndo();this.list.replaceChildren();if(!c){this.message('請先完成工作日切換或開啟記事。');return;}this.message('讀取中…',true);
+  try{const source=await this.loadSource(c);if(seq!==this.sequence||!this.panel.open||!this.contextMatches(c))return;this.source={...source,context:c};this.message(source.choices.length?'':source.emptyMessage||'尚無片語');this.render();}
   catch(e){if(seq===this.sequence&&this.contextMatches(c)){this.message('片語讀取未完成：'+e.message);this.list.replaceChildren();}}
  }
  render(){
   this.list.replaceChildren();if(!this.source)return;const q=this.search.value.trim().toLocaleLowerCase(),all=this.source.choices.filter(p=>(p.text+' '+p.label).toLocaleLowerCase().includes(q));
-  for(const choice of all.slice(0,50)){const button=document.createElement('button');button.type='button';button.className='phrase-choice';button.disabled=this.busy;const body=document.createElement('span'),origin=document.createElement('small');body.textContent=choice.text.length>180?choice.text.slice(0,180)+'…':choice.text;origin.textContent=choice.label+(choice.text.length>180?' · 長段落，點選帶入全文':'');button.append(body,origin);button.title=choice.text;button.onclick=e=>{if(e.detail>1)return;this.pick(choice);};this.list.append(button);}
+  for(const choice of all.slice(0,50)){const button=document.createElement('button');button.type='button';button.className='phrase-choice';button.disabled=this.busy;const body=document.createElement('span'),origin=document.createElement('small');body.textContent=choice.text.length>180?choice.text.slice(0,180)+'…':choice.text;origin.textContent=choice.label;button.append(body,origin);button.title=choice.text;button.onclick=e=>{if(e.detail>1)return;this.pick(choice);};this.list.append(button);}
   if(all.length>50||!all.length){const p=document.createElement('p');p.textContent=all.length>50?`符合 ${all.length} 段，目前顯示前 50 段；可輸入關鍵字縮小範圍。`:'沒有符合搜尋的片語。';this.list.append(p);}
  }
  capture(){return {value:this.target.value,start:this.target.selectionStart,end:this.target.selectionEnd};}
  unchanged(t){return this.target.value===t.value&&this.target.selectionStart===t.start&&this.target.selectionEnd===t.end;}
  async pick(choice){
   if(this.busy||!this.source)return;if(this.composing){this.message('請先完成輸入法組字，再選片語。');return;}const source=this.source,c=source.context,seq=this.sequence,t=this.capture();if(!this.contextMatches(c)){this.message('工作日或記事已變更，請重新整理片語。');return;}
-  this.busy=true;this.render();this.message('確認來源仍有效…');
+  this.busy=true;this.render();this.message('確認中…',true);
   try{
    const fresh=await this.loadSource(c);if(seq!==this.sequence||!this.panel.open||!this.contextMatches(c))return;
    if(fresh.revision!==source.revision||!fresh.choices.some(p=>p.text===choice.text&&p.revision===choice.revision)){await this.reload();if(this.contextMatches(c))this.message('來源已變更，片語已更新；未插入，請重新選取。');return;}
    if(this.composing||!this.unchanged(t))throw Error('文字或游標已變更，未插入；請重新選擇');
-   const plan=this.apply(choice.text,t);this.lastInsert={context:c,before:t,after:this.target.value,start:plan.start,length:this.target.value.length-t.value.length};this.updateUndo();this.message(this.successMessage());
+   const plan=this.apply(choice.text,t);this.lastInsert={context:c,before:t,after:this.target.value,start:plan.start,length:this.target.value.length-t.value.length};this.updateUndo();const feedback=this.successMessage();this.message(feedback.text,feedback.quiet);
   }catch(e){if(seq===this.sequence&&this.contextMatches(c))this.message('未插入：'+e.message);}
   finally{if(seq===this.sequence){this.busy=false;this.updateUndo();this.render();}}
  }
  updateUndo(){const x=this.lastInsert;this.undo.hidden=!x;this.undo.disabled=!x||this.busy||!this.contextMatches(x.context)||this.target.value!==x.after;}
  undoInsert(){
   const x=this.lastInsert;if(!x||this.busy||this.composing)return;if(!this.contextMatches(x.context)||this.target.value!==x.after){this.message('已有後續編輯或已切換工作日，未復原；請用欄位原生復原或手動調整。');return;}
-  try{this.restore(x);this.lastInsert=null;this.updateUndo();this.message('已復原本次片語插入；來源內容未改動。');}catch(e){this.message('復原未完成：'+e.message);}
+  try{this.restore(x);this.lastInsert=null;this.updateUndo();this.message('已復原',true);}catch(e){this.message('復原未完成：'+e.message);}
  }
 }

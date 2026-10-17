@@ -866,15 +866,15 @@ function restoreWorkPhrase(target,x,scope){
 function phrasePickerElements(prefix,panel,target){return {panel:$(panel),search:$(prefix+'PhraseSearch'),list:$(prefix+'PhraseList'),status:$(prefix+'PhraseStatus'),refresh:$('refresh'+(prefix==='photo'?'Photo':'Scope')+'Phrases'),undo:$('undo'+(prefix==='photo'?'Photo':'Scope')+'Phrase'),target:$(target)};}
 photoPhrasePicker=new WorkPhrasePicker({
  ...phrasePickerElements('photo','photoPhrasePanel','monWorkScope'),getContext:()=>phraseContext('monitoring'),
- loadSource:async c=>{const snapshot=await readPhraseMetadata(await db.open()),choices=photoEngineeringPhrases(snapshot,c.day);return {choices,revision:JSON.stringify(choices.map(p=>[p.text,p.revision])),emptyMessage:'本工作日尚無已儲存的照片工程描述；請先儲存紀錄集。'};},
+ loadSource:async c=>{const snapshot=await readPhraseMetadata(await db.open()),choices=photoEngineeringPhrases(snapshot,c.day);return {choices,revision:JSON.stringify(choices.map(p=>[p.text,p.revision])),emptyMessage:'本工作日尚無工程描述片語' };},
  apply:(p,b)=>applyWorkPhrase($('monWorkScope'),p,b,true),restore:x=>restoreWorkPhrase($('monWorkScope'),x,true),
- successMessage:()=>monDraftManager.hasUnsaved(displayedDay())?'已插入，可修改；草稿尚未安全儲存，請先重試或匯出備份。':'已插入並自動儲存草稿，可再修改；來源紀錄集未改動。'
+ successMessage:()=>monDraftManager.hasUnsaved(displayedDay())?{text:'已插入，但草稿尚未儲存。',quiet:false}:{text:'已插入',quiet:true}
 });
 scopePhrasePicker=new WorkPhrasePicker({
  ...phrasePickerElements('scope','scopePhrasePanel','engineering'),getContext:()=>phraseContext('engineering'),
- loadSource:async c=>{if(monDraftManager.hasUnsaved(c.day)||monDraftManager.hasCorrupt(c.day)||monDraftManager.hasConflict(c.day)||monDraftManager.isReadBlocked(c.day))throw Error('本工作日監看草稿尚未安全儲存，請先重試儲存或匯出備份；不使用舊草稿冒充最新內容');return {...readSavedScopePhrases(safeGetLocalStorage(),c.day),emptyMessage:'本工作日尚無已儲存的 (1) 作業子項目；主標題不會當成片語。'};},
+ loadSource:async c=>{if(monDraftManager.hasUnsaved(c.day)||monDraftManager.hasCorrupt(c.day)||monDraftManager.hasConflict(c.day)||monDraftManager.isReadBlocked(c.day))throw Error('本工作日監看草稿尚未安全儲存，請先重試儲存或匯出備份；不使用舊草稿冒充最新內容');return {...readSavedScopePhrases(safeGetLocalStorage(),c.day),emptyMessage:'本工作日尚無作業子項目片語' };},
  apply:(p,b)=>applyWorkPhrase($('engineering'),p,b,false),restore:x=>restoreWorkPhrase($('engineering'),x,false),
- successMessage:()=> '已插入，可再修改；請按「儲存紀錄集」。來源監看表單未改動。'
+ successMessage:()=>({text:'已插入，請按「儲存紀錄集」。',quiet:true})
 });
 $('syncStrata').onclick = () => {
  syncStrataBoth(true);
@@ -1242,7 +1242,7 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
-if($('masterBuild'))$('masterBuild').textContent=`App v32 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+if($('masterBuild'))$('masterBuild').textContent=`App v33 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
 $('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}
