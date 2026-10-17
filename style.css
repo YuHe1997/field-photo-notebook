@@ -159,4 +159,10 @@ article,#monForm fieldset{box-shadow:0 2px 8px rgba(42,58,42,.04)}
 .phrase-choice{display:block;text-align:left;width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
 .phrase-choice small{display:block;font-size:.8rem;color:var(--ui-muted);margin-top:4px}
 .phrase-panel .actions{margin-top:8px}
+.camera-direction-details summary{padding:5px 0;font-size:.88rem}.gallery-coordinates{font-size:.88rem;overflow-wrap:anywhere;margin:6px 0}
+#coordinateAlbumDialog{width:min(760px,calc(100vw - 32px));max-height:90dvh;box-sizing:border-box;overflow:auto;border:1px solid var(--ui-line);border-radius:12px;padding:16px;color:var(--ui-ink);background:var(--ui-canvas)}
+#coordinateAlbumDialog::backdrop{background:#0008}.coordinate-album-header{display:flex;align-items:center;justify-content:space-between;gap:8px}.coordinate-album-header h2{margin:0;font-size:1.2rem}
+#coordinateAlbumList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:58dvh;overflow:auto;margin-top:12px}
+.coordinate-thumbnail{min-width:0;text-align:left;padding:8px;overflow-wrap:anywhere}.coordinate-thumbnail img{width:100%;height:130px;object-fit:contain;background:var(--ui-soft)}.coordinate-thumbnail strong,.coordinate-thumbnail small{display:block}.coordinate-source-note{display:-webkit-box!important;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.coordinate-image{width:100%;height:34dvh;object-fit:contain;touch-action:pan-y pinch-zoom;background:var(--ui-soft)}#coordinateAlbumPhoto h3{font-size:1rem;margin:12px 0 6px}#coordinateAlbumPhoto p,#coordinateAlbumDay,#coordinateAlbumStatus{margin:8px 0;font-size:.9rem}#coordinateAlbumStatus:empty{display:none}#coordinateAlbumDetail>.actions{margin-top:10px}#coordinateAlbumInfo{margin-top:12px}
 
