@@ -40,7 +40,28 @@ export function monitoringInsertionIndex(records,day){
 export function workDayOf(p){return validDay(p.workDay)?p.workDay:localDay(p.buttonPressedAt??p.capturedAt??p.importedAt??p.createdAt??Date.now());}
 export function numberedPhoto(p){return `照片 ${String(p.photoNumber??'?').padStart(2,'0')}`;}
 export function numberedGroup(ids,photos){return '照片 '+ids.map(id=>String(photos.find(p=>p.id===id)?.photoNumber??'?').padStart(2,'0')).join('、');}
-export function previewRotation(p,width,height){if([0,90,180,270].includes(p.displayRotation))return p.displayRotation;const angle=p.screenAngle??p.heading?.screenAngle,base=height<=width?0:(angle===270||angle===-90?270:90);return (base+180)%360;}
+export function cameraAutoRotation({width,height,screenAngle=null,beta=null,gamma=null}={}){
+ if(Number.isFinite(beta)&&Number.isFinite(gamma)){
+  const b=beta*Math.PI/180,g=gamma*Math.PI/180,ux=-Math.cos(b)*Math.sin(g),uy=Math.sin(b);
+  if(Math.hypot(ux,uy)>=0.25){
+   const skyEdge=Math.abs(ux)>Math.abs(uy)?(ux>0?90:270):(uy>=0?0:180);
+   if(height>width)return (360-skyEdge)%360;
+   const topEdge=screenAngle===270||screenAngle===-90?270:screenAngle===90?90:(skyEdge===90||skyEdge===270?90:0);
+   return (topEdge-skyEdge+360)%360;
+  }
+ }
+ if(height<=width)return 0;
+ return screenAngle===270||screenAngle===-90?90:270;
+}
+export function previewRotation(p,width,height){
+ if([0,90,180,270].includes(p?.displayRotation))return p.displayRotation;
+ const tilt=p?.deviceTilt??p?.heading;
+ if(Number.isFinite(tilt?.beta)&&Number.isFinite(tilt?.gamma)){
+  return cameraAutoRotation({width,height,screenAngle:p?.screenAngle??p?.heading?.screenAngle,beta:tilt.beta,gamma:tilt.gamma});
+ }
+ const angle=p?.screenAngle??p?.heading?.screenAngle,base=height<=width?0:(angle===270||angle===-90?270:90);
+ return (base+180)%360;
+}
 export function photoMinute(p){const time=p.buttonPressedAt??p.capturedAt??p.importedAt;if(!Number.isFinite(time))return '時間未取得';const d=new Date(time);if(!Number.isFinite(d.getTime()))return '時間未取得';const two=n=>String(n).padStart(2,'0');return `${d.getFullYear()}/${two(d.getMonth()+1)}/${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}${p.source==='gallery'?'(匯入)':''}`;}
 export function compactCoordinates(l){if(!l||!Number.isFinite(l.latitude)||!Number.isFinite(l.longitude)||Math.abs(l.latitude)>90||Math.abs(l.longitude)>180)return '座標未取得';const f=n=>n.toFixed(7).replace(/\.?0+$/,'');return `${f(l.latitude)},${f(l.longitude)}`;}
 export function compactDirection(h){const label=directionLabel(h?.degrees);if(!label)return '方向未取得';const notes=[];if(h.accuracy<0||(typeof h.quality==='string'&&h.quality.includes('不可靠')))notes.push('讀值不可靠');if((h.freshnessAtAcquisitionCompleted??h.freshness)==='過期')notes.push('讀值過期');notes.push('需驗證');return `${label}(${notes.join('，')})`;}

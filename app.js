@@ -17,7 +17,7 @@ import {
   insertTextAtCaret,
   handleWorkScopeKeyDown
 } from './mon-numbering.js';
-import {compactCoordinates,compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,previewRotation,zoomCapability,snapZoom,cropRect,focusCapabilities,mapPreviewTapToSensor,deriveCameraBearing} from './core.js';
+import {compactCoordinates,compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,cameraAutoRotation,previewRotation,zoomCapability,snapZoom,cropRect,focusCapabilities,mapPreviewTapToSensor,deriveCameraBearing} from './core.js';
 import {WorkPhrasePicker,readPhraseMetadata,photoEngineeringPhrases,readSavedScopePhrases,phraseInsertion} from './work-phrases.js';
 import {AREA_DATA} from './area-data.js';
 import {createAreaMatcher,areaReferenceText} from './area-reference.js';
@@ -33,7 +33,7 @@ const say=s=>{
     if($('cameraOverlayStatus')){$('cameraOverlayStatus').textContent=s;$('cameraOverlayStatus').classList.add('is-notice');}
   }
 };
-let photos=[],assets=[],groups=[],selected=new Set(),multi=false,edit=null,editBaseline=null,urls={gallery:[],groups:[],order:[],reference:[]},stream=null,watch=null,gps=null,heading=null,sensorState='尚未啟用',active='camera',starting=false,busy=false,rotating=false,cameraSession=0,zoomState=null,focusState=null,lastFocusedElement=null,directionStatus='尚未啟用',gpsStatus='尚未啟用',activeSessionQueue=Promise.resolve(),constraintApplying=false,commitPromise=null,activeStartupSession=0,sessionReady=false;
+let photos=[],assets=[],groups=[],selected=new Set(),multi=false,edit=null,editBaseline=null,urls={gallery:[],groups:[],order:[],reference:[]},stream=null,watch=null,gps=null,heading=null,deviceTilt=null,sensorState='尚未啟用',active='camera',starting=false,busy=false,rotating=false,cameraSession=0,zoomState=null,focusState=null,lastFocusedElement=null,directionStatus='尚未啟用',gpsStatus='尚未啟用',activeSessionQueue=Promise.resolve(),constraintApplying=false,commitPromise=null,activeStartupSession=0,sessionReady=false;
 const text=(tag,s)=>{const e=document.createElement(tag);e.textContent=s;return e;};
 async function run(fn){try{await fn();}catch(e){say('操作／儲存失敗：'+e.message+'。資料未宣稱成功，請重試或先備份。');}}
 const DAY_KEY='field-photo-notebook-work-days';
@@ -125,7 +125,7 @@ function stop(){
   stream=null;
   $('video').srcObject=null;
   if(watch!==null)navigator.geolocation.clearWatch(watch);
-  watch=null;gps=null;heading=null;
+  watch=null;gps=null;heading=null;deviceTilt=null;
   zoomState?.cancelFrame?.();zoomState=null;
   focusState=null;
   if($('focusReticle'))$('focusReticle').hidden=true;
@@ -438,6 +438,11 @@ function onOrientation(e){
     if(!heading)directionStatus='等待絕對方位讀值';
     return;
   }
+  if(Number.isFinite(e.beta)&&Number.isFinite(e.gamma)){
+    deviceTilt={beta:e.beta,gamma:e.gamma,readingAt:Date.now(),screenAngle:screen.orientation?.angle??window.orientation??null};
+  }else if(!e.isTrusted){
+    deviceTilt=null;
+  }
   if(Number.isFinite(e.webkitCompassHeading)&&e.webkitCompassHeading>=0){
     degrees=e.webkitCompassHeading;source='webkitCompassHeading';
   }else if(isAbsolute&&hasValidAlpha){
@@ -541,14 +546,19 @@ $('shutter').onclick=()=>run(async()=>{
     if(pending.length)await commitPending();
     if(session!==cameraSession||track.readyState==='ended')throw Error('相機已停止，請重新開啟後拍攝');
     const acquisitionStartedAt=Date.now();let blob,method,frameCopiedAt=null,outputWidth=null,outputHeight=null;
+    const v=$('video'),tilt=buttonReading(deviceTilt,buttonPressedAt,10000)??direction;
+    const captureRotation=v?.videoWidth&&v?.videoHeight?cameraAutoRotation({width:v.videoWidth,height:v.videoHeight,screenAngle,beta:tilt?.beta,gamma:tilt?.gamma}):0;
     try{
-      if(useZoomFrame||!window.ImageCapture)throw Error();
+      if(useZoomFrame||captureRotation!==0||!window.ImageCapture)throw Error();
       blob=await new ImageCapture(track).takePhoto();method='ImageCapture.takePhoto';
     }catch(e){
       if(session!==cameraSession||track.readyState==='ended')throw Error('相機已停止，未擷取影像');
-      const v=$('video');if(!v.videoWidth)throw Error('相機影格尚未就緒');
-      const crop=cropRect(v.videoWidth,v.videoHeight,zoom.mode==='browser-digital-crop'?zoom.factor:1),c=document.createElement('canvas');c.width=crop.width;c.height=crop.height;
-      c.getContext('2d').drawImage(v,crop.sx,crop.sy,crop.sw,crop.sh,0,0,c.width,c.height);frameCopiedAt=Date.now();outputWidth=c.width;outputHeight=c.height;
+      if(!v.videoWidth)throw Error('相機影格尚未就緒');
+      const crop=cropRect(v.videoWidth,v.videoHeight,zoom.mode==='browser-digital-crop'?zoom.factor:1),swapped=captureRotation%180!==0,c=document.createElement('canvas');c.width=swapped?crop.height:crop.width;c.height=swapped?crop.width:crop.height;
+      const ctx=c.getContext('2d');
+      if(captureRotation){ctx.translate(c.width/2,c.height/2);ctx.rotate(captureRotation*Math.PI/180);ctx.drawImage(v,crop.sx,crop.sy,crop.sw,crop.sh,-crop.width/2,-crop.height/2,crop.width,crop.height);}
+      else ctx.drawImage(v,crop.sx,crop.sy,crop.sw,crop.sh,0,0,c.width,c.height);
+      frameCopiedAt=Date.now();outputWidth=c.width;outputHeight=c.height;
       blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.92));method=useZoomFrame?'變焦瀏覽器影格擷取（數位／API 縮放，非 RAW）':'瀏覽器影格擷取（非 RAW／感光元件原檔）';
     }
     const acquisitionCompletedAt=Date.now();
@@ -585,11 +595,11 @@ $('shutter').onclick=()=>run(async()=>{
       timingMeaning:'曝光時間未知；按鈕／呼叫開始／Blob 取得／影格複製均為瀏覽器裝置時鐘，非硬體曝光時間',
       importedAt:null,originalName:id+(blob.type==='image/png'?'.png':blob.type==='image/webp'?'.webp':'.jpg'),mime:blob.type,captureMethod:method,
       location:completionReading(location,acquisitionCompletedAt,10000),heading:headingCompleted,
-      cameraFacing:currentFacing,cameraBearing:finalBearing,cameraBearingLabel:finalLabel,cameraBearingAlgorithm:finalAlg,cameraBearingEvidence:finalEvidence,cameraTransformEvidence:finalEvidence??'未驗證裝置／螢幕／鏡頭轉換',workDay,screenAngle,zoom,outputWidth,outputHeight}});
+      cameraFacing:currentFacing,cameraBearing:finalBearing,cameraBearingLabel:finalLabel,cameraBearingAlgorithm:finalAlg,cameraBearingEvidence:finalEvidence,cameraTransformEvidence:finalEvidence??'未驗證裝置／螢幕／鏡頭轉換',workDay,screenAngle,zoom,outputWidth,outputHeight,displayRotation:0}});
     await commitPending();
   }finally{busy=false;zoomUI();}
 });
-$('import').onchange=()=>run(async()=>{const workDay=activeDay;for(const file of $('import').files){if(!file.type.startsWith('image/'))throw Error('請選取影像');pending.push({blob:file,photo:{id:crypto.randomUUID(),source:'gallery',originalName:file.name,mime:file.type,capturedAt:null,importedAt:Date.now(),fileLastModifiedAt:file.lastModified,location:null,heading:null,sourceExif:null,workDay,captureMethod:'原始檔案匯入；未解析 EXIF，預覽由瀏覽器解碼方向' }});}await commitPending();$('import').value='';});
+$('import').onchange=()=>run(async()=>{const workDay=activeDay;for(const file of $('import').files){if(!file.type.startsWith('image/'))throw Error('請選取影像');pending.push({blob:file,photo:{id:crypto.randomUUID(),source:'gallery',originalName:file.name,mime:file.type,capturedAt:null,importedAt:Date.now(),fileLastModifiedAt:file.lastModified,location:null,heading:null,sourceExif:null,workDay,captureMethod:'原始檔案匯入；未解析 EXIF，預覽由瀏覽器解碼方向',...(file.type!=='image/png'?{displayRotation:0}:{})}});}await commitPending();$('import').value='';});
 function choose(id){if(multi){selected.has(id)?selected.delete(id):selected.add(id);}else selected=selected.has(id)?new Set():new Set([id]);render();}
 function render(){$('editingTab').hidden=$('appendToEditor').hidden=!edit;releaseImages('gallery');releaseImages('groups');$('gallery').replaceChildren();const days=[...new Set([...dayState.days,...photos.map(workDayOf),activeDay])].filter(validDay).sort();$('workDay').replaceChildren();for(const d of days){const o=text('option',`${d}（${photos.filter(p=>workDayOf(p)===d).length} 張）`);o.value=d;$('workDay').append(o);}$('workDay').value=activeDay;$('currentDay').textContent=`工作日：${activeDay}；編號按工作日獨立且不因刪除重新編排`;for(const id of selected)if(!dayPhotos().some(p=>p.id===id))selected.delete(id);const assigned=new Set(groups.flatMap(g=>g.photoIds));for(const p of dayPhotos().filter(p=>!assigned.has(p.id)||selected.has(p.id))){const card=text('div','');card.className='card';const b=text('button',`${selected.has(p.id)?'☑':'□'} ${photoLabel(p)} · ${p.source==='camera'?'拍攝':'相簿匯入'}`);b.setAttribute('aria-pressed',selected.has(p.id));b.prepend(photoImage(p.id,'gallery'));let timer,long=false;b.onpointerdown=e=>{if(e.button!==0)return;long=false;timer=setTimeout(()=>{long=true;multi=true;selected.add(p.id);render();},550);};b.onpointerup=b.onpointerleave=b.onpointercancel=()=>clearTimeout(timer);b.onclick=()=>{if(long){long=false;return;}choose(p.id);};const coordinates=text('p',compactCoordinates(p.location));coordinates.className='gallery-coordinates';card.append(b,photoAreaInfo(p),coordinates);$('gallery').append(card);}$('multi').textContent=multi?'結束多選':'選取多張';$('multi').setAttribute('aria-pressed',multi);$('selectionCount').textContent=`已選 ${selected.size} 張；本日待整理 ${dayPhotos().filter(p=>!assigned.has(p.id)).length} 張`;$('appendToEditor').disabled=$('deleteSelected').disabled=$('rotateLeft').disabled=$('rotateRight').disabled=!selected.size;$('groupList').replaceChildren();if(!groups.some(groupInDay))$('groupList').append(text('p','本工作日尚無紀錄集。請到待整理照片選取照片並記事。'));for(const g of groups.filter(groupInDay)){const a=text('article','');a.append(text('h3',groupTitle(g.photoIds)),text('p',`${g.photoIds.length} 張 · 更新 ${new Date(g.updatedAt).toLocaleString()}`));const strip=text('div','');strip.className='group-photos';g.photoIds.forEach((id,i)=>{const p=photos.find(p=>p.id===id),figure=text('figure','');figure.append(photoImage(id,'groups'),text('figcaption',compactPhotoLines(p,i)[0]));strip.append(figure);});a.append(strip);g.photoIds.forEach((id,i)=>{const row=text('div','');row.append(text('strong',compactPhotoLines(photos.find(p=>p.id===id),i)[0]),photoInfo(photos.find(p=>p.id===id)));a.append(row);});for(const [label,value] of [['工程描述',g.engineering]]){const note=text('p',`${label}：${value||'未填寫'}`);note.className='note-text';a.append(note);}const e=text('button','編輯／排序照片');e.onclick=()=>openEditor(g);const d=text('button','移除紀錄集（保留原始照片）');d.onclick=()=>run(async()=>{if(edit?.id===g.id){say('請先關閉或儲存此紀錄集的編輯，再移除。');return;}if(confirm('只移除此紀錄集，原始照片仍保留？')){await db.removeGroup(g.id);await load();say('已移除紀錄集，照片仍保留');}});a.append(e,d);$('groupList').append(a);}if(edit&&active==='editor')renderOrder();}
 $('multi').onclick=()=>{multi=!multi;if(!multi)selected=new Set([...selected].slice(0,1));render();};
@@ -870,6 +880,7 @@ function renderCoordinateAlbum(index=-1){
  const image=photoImage(entry.photo.id,'reference',state.snapshot);image.classList.add('coordinate-image');
  let touch=null;image.onpointerdown=e=>{touch=e.pointerType==='touch'?{x:e.clientX,y:e.clientY}:null;};image.onpointercancel=()=>{touch=null;};image.onpointerup=e=>{if(!touch)return;const dx=e.clientX-touch.x,dy=e.clientY-touch.y;touch=null;if(Math.abs(dx)>45&&Math.abs(dy)<60){const next=index+(dx<0?1:-1);if(next>=0&&next<state.entries.length)renderCoordinateAlbum(next);}};
  $('coordinateAlbumPhoto').append(text('h3',`${photoLabel(entry.photo)} · ${index+1}/${state.entries.length}`),image,text('p',entry.source));
+ if(entry.engineering){const note=text('p',`工程描述：${entry.engineering}`);note.className='note-text';$('coordinateAlbumPhoto').append(note);}
  const coordinates=compactCoordinates(entry.photo.location);$('coordinateAlbumValue').value=coordinates;$('copyPhotoCoordinates').disabled=coordinates==='座標未取得';
  const info=photoInfo(entry.photo);info.querySelector(':scope > p:nth-child(2)')?.remove();$('coordinateAlbumInfo').append(info);$('coordinatePrevious').disabled=index===0;$('coordinateNext').disabled=index===state.entries.length-1;
 }
@@ -1234,6 +1245,24 @@ $('createNewSubfolder')?.addEventListener('click',async()=>{
  }
 });
 
+async function preparePhotoForDrive(photo,original){
+ const hasExplicitRotation=[90,180,270].includes(photo.displayRotation);
+ const needsAutoCameraFix=photo.source==='camera'&&photo.displayRotation===undefined&&photo.mime==='image/jpeg';
+ if(!hasExplicitRotation&&!needsAutoCameraFix)return original;
+ const url=URL.createObjectURL(original);let canvas;
+ try{
+  const im=new Image();im.src=url;await im.decode();
+  const w=im.naturalWidth,h=im.naturalHeight,r=previewRotation(photo,w,h);
+  if(!r||r%360===0)return original;
+  const swapped=r%180!==0;canvas=document.createElement('canvas');
+  canvas.width=swapped?h:w;canvas.height=swapped?w:h;
+  const ctx=canvas.getContext('2d');ctx.translate(canvas.width/2,canvas.height/2);ctx.rotate(r*Math.PI/180);ctx.drawImage(im,-w/2,-h/2,w,h);
+  const mime=photo.mime==='image/png'?'image/png':photo.mime==='image/webp'?'image/webp':'image/jpeg';
+  return (await new Promise(resolve=>canvas.toBlob(resolve,mime,0.92)))||original;
+ }finally{
+  URL.revokeObjectURL(url);if(canvas)canvas.width=canvas.height=1;
+ }
+}
 $('uploadPhotosToDrive')?.addEventListener('click',async()=>{
  if(uploadingPhotos||monitoringWorking)return;
  const statusEl=$('photoDriveStatus');
@@ -1241,8 +1270,8 @@ $('uploadPhotosToDrive')?.addEventListener('click',async()=>{
  try{folderId=parseDriveId($('photoDriveFolder').value);}catch(e){if(statusEl)statusEl.textContent=e.message;return;}
  const batchDay=displayedDay();
  const autoDaily=$('autoDailySubfolder').checked;
- const uploadList=photos.filter(p=>workDayOf(p)===batchDay&&p.source==='camera').map(p=>({photo:p,original:assets.find(a=>a.id===p.id)?.original}));
- if(!uploadList.length){if(statusEl)statusEl.textContent='目前工作日沒有可上傳的相機照片。';return;}
+ const uploadList=photos.filter(p=>workDayOf(p)===batchDay&&(p.source==='camera'||p.source==='gallery')).map(p=>({photo:p,original:assets.find(a=>a.id===p.id)?.original}));
+ if(!uploadList.length){if(statusEl)statusEl.textContent='目前工作日沒有可上傳的照片。';return;}
  if(uploadList.some(item=>!item.original)){if(statusEl)statusEl.textContent='原始照片缺失，未開始上傳。請先檢查本機資料。';return;}
  uploadingPhotos=true;monitoringControls();
  try{
@@ -1257,7 +1286,8 @@ $('uploadPhotosToDrive')?.addEventListener('click',async()=>{
   for(let i=0;i<uploadList.length;i++){
    const {photo:p,original}=uploadList[i];
    if(statusEl)statusEl.textContent=`正在上傳照片 (${i+1}/${uploadList.length})：${photoLabel(p)}…`;
-   await uploadOriginalPhoto(p,original,targetFolderId);
+   const uploadBlob=await preparePhotoForDrive(p,original);
+   await uploadOriginalPhoto(p,uploadBlob,targetFolderId);
    successCount++;
   }
   if(statusEl)statusEl.textContent=`成功上傳 ${successCount} 張原始照片至 Google Drive！本機照片仍保留。`;
@@ -1295,7 +1325,7 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
-if($('masterBuild'))$('masterBuild').textContent=`App v34 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+if($('masterBuild'))$('masterBuild').textContent=`App v35 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
 $('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}
