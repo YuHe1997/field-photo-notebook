@@ -12,7 +12,7 @@
 .work-days{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.work-days label{flex:1;min-width:180px}.work-days select{display:block;font:inherit;min-height:46px;width:100%;max-width:100%;color:#19332f;background:white;border-radius:8px}.card img,.group-photos img{height:auto;aspect-ratio:4/3;object-fit:contain;background:#eef1eb}input[readonly]{background:#edf1e8;color:#19332f}#video{aspect-ratio:4/3;object-fit:contain}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
 /* Camera Full-Viewport Overlay */
-.camera-overlay{position:fixed;inset:0;width:100vw;width:100dvw;height:100vh;height:100dvh;z-index:1000;background:#000;color:#f4f3ed;box-sizing:border-box;overflow:hidden}
+.camera-overlay{position:fixed;inset:0;width:100vw;width:100dvw;height:100vh;height:100dvh;z-index:1000;background:#000;color:#f4f3ed;box-sizing:border-box;overflow:hidden;touch-action:pan-x pan-y}
 body.camera-overlay-active{overflow:hidden}
 .camera-topbar{position:absolute;top:max(8px,env(safe-area-inset-top));left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));z-index:30;display:flex;align-items:center;gap:6px;pointer-events:none}
 .camera-topbar:has(.is-notice){z-index:50}

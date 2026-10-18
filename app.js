@@ -24,6 +24,8 @@ import {createAreaMatcher,areaReferenceText} from './area-reference.js';
 let areaMatcher;try{areaMatcher=createAreaMatcher(AREA_DATA);}catch{areaMatcher=()=>({status:'unavailable',reason:'dataset-invalid',candidates:[],datasetVersion:AREA_DATA?.version});}
 const areaReference=p=>{try{return areaMatcher(p);}catch{return {status:'unavailable',reason:'dataset-invalid',candidates:[]};}};
 const $=id=>document.getElementById(id);
+const preventCameraPageZoom=e=>{if(document.body.classList.contains('camera-overlay-active'))e.preventDefault();};
+for(const type of ['gesturestart','gesturechange','gestureend'])document.addEventListener(type,preventCameraPageZoom,{passive:false});
 let overlayErrorText=null;
 const say=s=>{
   $('status').textContent=s;
@@ -1325,7 +1327,7 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
-if($('masterBuild'))$('masterBuild').textContent=`App v35 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+if($('masterBuild'))$('masterBuild').textContent=`App v36 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
 $('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}
