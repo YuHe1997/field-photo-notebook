@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f5f1">
+  <title>現地照片筆記｜介面試做版</title>
+  <link rel="stylesheet" href="./preview-ui.css">
+</head>
+<body>
+  <header class="preview-header">
+    <div class="brand-row">
+      <div>
+        <p class="eyebrow">FIELD PHOTO NOTEBOOK · UI CONCEPT</p>
+        <h1>現地照片筆記 <span class="version-chip">介面試做版</span></h1>
+      </div>
+      <a class="return-link" href="./">返回正式版 v36</a>
+    </div>
+    <p class="safety-note"><strong>純視覺試做</strong>：以下資料皆為範例；本頁不讀取或修改本機照片、草稿與資料庫，不啟動相機、不登入 Google，也不會上傳。</p>
+    <nav class="screen-nav" role="tablist" aria-label="試看介面分頁">
+      <button type="button" role="tab" id="tab-camera" aria-controls="screen-camera" aria-selected="true" data-screen="camera">拍攝</button>
+      <button type="button" role="tab" id="tab-pending" aria-controls="screen-pending" aria-selected="false" data-screen="pending">待整理照片</button>
+      <button type="button" role="tab" id="tab-groups" aria-controls="screen-groups" aria-selected="false" data-screen="groups">紀錄集</button>
+      <button type="button" role="tab" id="tab-editor" aria-controls="screen-editor" aria-selected="false" data-screen="editor">記事</button>
+      <button type="button" role="tab" id="tab-monitoring" aria-controls="screen-monitoring" aria-selected="false" data-screen="monitoring">監看表單</button>
+      <button type="button" role="tab" id="tab-reference" aria-controls="screen-reference" aria-selected="false" data-screen="reference">參考照片</button>
+    </nav>
+  </header>
+
+  <main class="preview-main">
+    <p id="demoToast" class="demo-toast" role="status" aria-live="polite" hidden></p>
+
+    <section id="screen-camera" class="screen" role="tabpanel" aria-labelledby="tab-camera" tabindex="0">
+      <div class="screen-heading"><div><p class="eyebrow">01 / CAMERA</p><h2>拍攝</h2><p class="subheading">把現場留清楚，操作保持簡單。</p></div><span class="date-pill">工作日　2026-10-18</span></div>
+      <article class="camera-card">
+        <div class="camera-preview" aria-label="相機取景示意，非即時影像">
+          <div class="scene-label"><span class="live-dot"></span>取景畫面示意</div>
+          <div class="focus-mark" aria-hidden="true"></div>
+          <span class="scene-caption">南側排水溝・範例場景</span>
+        </div>
+        <div class="camera-bottom">
+          <div class="camera-zoom-row"><span>拍攝倍率</span><div class="zoom-control"><button type="button" data-demo aria-label="縮小倍率">−</button><span class="zoom-value">1×</span><button type="button" data-demo aria-label="放大倍率">＋</button></div></div>
+          <p class="camera-hint">定位與方向狀態會在拍攝前簡潔提示</p>
+          <button class="button-primary shutter-button" type="button" data-demo><span class="shutter-ring" aria-hidden="true"></span>拍照</button>
+        </div>
+      </article>
+      <div class="sensor-row"><span class="status-dot"></span>GPS 已取得　·　方向僅供參考</div>
+    </section>
+
+    <section id="screen-pending" class="screen" role="tabpanel" aria-labelledby="tab-pending" tabindex="0" hidden>
+      <div class="screen-heading"><div><p class="eyebrow">02 / PHOTOS</p><h2>待整理照片</h2><p class="subheading">先選照片，再建立紀錄集。</p></div><span class="count-pill">今日 12 張</span></div>
+      <div class="toolbar"><button class="button-secondary" type="button" data-demo>選取多張</button><button class="button-secondary" type="button" data-demo>排序</button></div>
+      <div class="photo-grid">
+        <button class="photo-tile selected" type="button" data-demo aria-pressed="true"><span class="photo-art art-one"></span><span class="photo-check">✓</span><span class="photo-label"><strong>照片 01</strong><small>09:42 · GPS 已記錄</small></span></button>
+        <button class="photo-tile selected" type="button" data-demo aria-pressed="true"><span class="photo-art art-two"></span><span class="photo-check">✓</span><span class="photo-label"><strong>照片 02</strong><small>09:44 · GPS 已記錄</small></span></button>
+        <button class="photo-tile" type="button" data-demo aria-pressed="false"><span class="photo-art art-three"></span><span class="photo-label"><strong>照片 03</strong><small>09:51 · GPS 已記錄</small></span></button>
+        <button class="photo-tile" type="button" data-demo aria-pressed="false"><span class="photo-art art-four"></span><span class="photo-label"><strong>照片 04</strong><small>10:03 · GPS 已記錄</small></span></button>
+      </div>
+      <div class="selection-bar"><span><strong>已選 2 張</strong><small>可一起加入同一紀錄集</small></span><button class="button-primary" type="button" data-demo>建立紀錄集</button></div>
+      <div class="quiet-actions"><button class="button-danger" type="button" data-demo>刪除已選照片</button></div>
+    </section>
+
+    <section id="screen-groups" class="screen" role="tabpanel" aria-labelledby="tab-groups" tabindex="0" hidden>
+      <div class="screen-heading"><div><p class="eyebrow">03 / GROUPS</p><h2>紀錄集</h2><p class="subheading">依工作日整理，照片與描述一目了然。</p></div><span class="count-pill">已整理 4 組</span></div>
+      <div class="toolbar"><button class="button-primary" type="button" data-demo>建立紀錄集</button><button class="button-secondary" type="button" data-demo>匯出照片表格</button></div>
+      <article class="group-card"><div class="group-preview"><span class="photo-art art-one"></span><span class="photo-art art-two"></span></div><div class="group-copy"><div class="inline-heading"><h3>紀錄集 01</h3><span class="saved-badge">已儲存</span></div><p>南側排水溝開挖，深約 50 公分。</p><small>2 張照片 · 09:42–09:44</small><div class="group-actions"><button class="button-secondary" type="button" data-open-screen="editor">檢視／編輯</button><button class="text-button" type="button" data-demo>更多</button></div></div></article>
+      <article class="group-card"><div class="group-preview"><span class="photo-art art-three"></span></div><div class="group-copy"><div class="inline-heading"><h3>紀錄集 02</h3><span class="saved-badge">已儲存</span></div><p>工作面清理，未見明顯遺物。</p><small>1 張照片 · 10:03</small><div class="group-actions"><button class="button-secondary" type="button" data-open-screen="editor">檢視／編輯</button><button class="text-button" type="button" data-demo>更多</button></div></div></article>
+    </section>
+
+    <section id="screen-editor" class="screen" role="tabpanel" aria-labelledby="tab-editor" tabindex="0" hidden>
+      <div class="screen-heading"><div><p class="eyebrow">04 / EDITOR</p><h2>編輯紀錄集</h2><p class="subheading">先看照片，再寫下現場觀察。</p></div><span class="count-pill">2 張照片</span></div>
+      <article class="surface-card"><div class="editor-photo-row"><span class="photo-art art-one"></span><span class="photo-art art-two"></span><button class="add-photo" type="button" data-demo aria-label="加入照片">＋</button></div><div class="editor-meta"><span>照片 01–02</span><span>09:42 · GPS 已記錄</span></div></article>
+      <label class="field-label" for="sample-engineering">工程描述</label>
+      <textarea id="sample-engineering" rows="4">南側排水溝開挖，深約 50 公分；土色褐灰，未見明顯遺物。</textarea>
+      <details class="phrase-card"><summary>選用監看表單的作業子項目</summary><button class="phrase-option" type="button" data-demo>1.(1) 南側排水溝開挖</button><button class="phrase-option" type="button" data-demo>1.(2) 工作面清理</button></details>
+      <div class="editor-actions"><button class="button-secondary" type="button" data-demo>選取更多照片</button><button class="button-primary" type="button" data-demo>儲存紀錄集</button></div>
+    </section>
+
+    <section id="screen-monitoring" class="screen" role="tabpanel" aria-labelledby="tab-monitoring" tabindex="0" hidden>
+      <div class="screen-heading"><div><p class="eyebrow">05 / FIELD LOG</p><h2>監看紀錄表單</h2><p class="subheading">分區清楚，填寫時不必到處找功能。</p></div><span class="saved-badge">草稿已儲存</span></div>
+      <div class="form-card"><h3>基本資料</h3><div class="form-grid"><label>工程名稱<input type="text" value="示範工程（範例）"></label><label>監看日期<input type="text" value="2026 年 10 月 18 日"></label></div></div>
+      <div class="form-card"><div class="inline-heading"><h3>現地觀察與作業狀況</h3><button class="button-soft" type="button" data-open-screen="reference">參考照片</button></div><div class="helper-row"><button class="button-secondary" type="button" data-demo>＋ 新增主項目</button><button class="button-secondary" type="button" data-demo>＋ 新增子項目</button></div><label>作業項目、範圍與深度<textarea rows="4">1. 排水改善工程
+  (1) 南側排水溝開挖，深約 50 公分</textarea></label><details class="phrase-card"><summary>選用照片紀錄集的工程描述</summary><button class="phrase-option" type="button" data-demo>照片 01–02　南側排水溝開挖</button></details></div>
+      <div class="form-card"><h3>地層與現場觀察</h3><label>地層堆積<textarea rows="2">1.(1) 表土及回填層。</textarea></label><label>地層描述<textarea rows="2">褐灰色砂質土，含少量礫石。</textarea></label></div>
+      <div class="form-card output-card"><div><p class="eyebrow">輸出與備份</p><h3>完成紀錄後再選擇輸出</h3></div><div class="output-actions"><button class="button-secondary" type="button" data-demo>登入本月母表</button><button class="button-primary" type="button" data-demo>依日期加入副本</button><button class="button-secondary" type="button" data-demo>上傳當日照片</button></div></div>
+    </section>
+
+    <section id="screen-reference" class="screen" role="tabpanel" aria-labelledby="tab-reference" tabindex="0" hidden>
+      <div class="screen-heading"><div><p class="eyebrow">06 / PHOTO REFERENCE</p><h2>參考照片</h2><p class="subheading">對照照片資訊，不改動原始紀錄。</p></div><span class="date-pill">2026-10-18</span></div>
+      <div class="reference-layout"><div class="reference-photo photo-art art-one"><span class="photo-number">照片 01</span></div><article class="reference-card"><div class="inline-heading"><h3>照片資訊</h3><span class="saved-badge">紀錄集 01</span></div><p>南側排水溝開挖，深約 50 公分。</p><dl><div><dt>拍攝時間</dt><dd>09:42</dd></div><div><dt>座標</dt><dd>23.4689, 120.3125</dd></div><div><dt>區域參考</dt><dd>南側工作面（範例）</dd></div><div><dt>裝置方向</dt><dd>東南參考 · 僅供參考</dd></div></dl><button class="button-secondary" type="button" data-demo>複製座標</button></article></div>
+      <div class="reference-nav"><button class="button-secondary" type="button" data-demo>上一張</button><span>1 / 4</span><button class="button-secondary" type="button" data-demo>下一張</button></div>
+    </section>
+
+    <footer class="preview-footer"><span>試做版只展示視覺樣式，不會執行實際功能。</span><a href="./">返回正式 App</a></footer>
+  </main>
+
+  <script>
+    const tabs=[...document.querySelectorAll('[role="tab"]')];
+    const panels=[...document.querySelectorAll('[role="tabpanel"]')];
+    const toast=document.querySelector('#demoToast');
+    let toastTimer;
+    function showScreen(name){
+      tabs.forEach(tab=>{const active=tab.dataset.screen===name;tab.setAttribute('aria-selected',String(active));tab.tabIndex=active?0:-1;});
+      panels.forEach(panel=>{panel.hidden=panel.id!==`screen-${name}`;});
+      const activePanel=document.querySelector(`#screen-${name}`);activePanel?.focus({preventScroll:true});
+    }
+    tabs.forEach(tab=>tab.addEventListener('click',()=>showScreen(tab.dataset.screen)));
+    document.querySelectorAll('[data-open-screen]').forEach(button=>button.addEventListener('click',()=>showScreen(button.dataset.openScreen)));
+    document.querySelectorAll('[data-demo]').forEach(button=>button.addEventListener('click',()=>{
+      toast.textContent='這是純視覺試做版；拍照、儲存、刪除與雲端操作都未啟用。';toast.hidden=false;
+      clearTimeout(toastTimer);toastTimer=setTimeout(()=>{toast.hidden=true;},3200);
+    }));
+    document.querySelectorAll('[role="tab"]').forEach(tab=>tab.addEventListener('keydown',event=>{
+      if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+      event.preventDefault();let index=tabs.indexOf(tab);
+      if(event.key==='Home')index=0;else if(event.key==='End')index=tabs.length-1;else index=(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+      tabs[index].focus();showScreen(tabs[index].dataset.screen);
+    }));
+  </script>
+</body>
+</html>
