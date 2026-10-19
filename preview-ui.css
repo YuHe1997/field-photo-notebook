@@ -377,6 +377,91 @@ input[type="file"]::file-selector-button {
 /* ==========================================================================
    3. Section-by-Section Refinements
    ========================================================================== */
+
+/* Keep only 4 main tabs in top navigation (hide #editingTab in nav bar) */
+header nav #editingTab {
+  display: none !important;
+}
+
+/* Pending Photos top toolbar: #multi + #import side by side above #compose */
+#photos .photos-top-tools {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 8px;
+  margin: 8px 0;
+}
+#photos .photos-top-tools > button,
+#photos .photos-top-tools > label.import-btn {
+  flex: 1 1 0;
+  min-height: 44px;
+  margin: 0 !important;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+#photos .photos-top-tools > label.import-btn {
+  background: var(--brand-soft);
+  border: 2px solid var(--brand);
+  color: var(--brand-press);
+  font-weight: 700;
+}
+#photos .photos-top-tools > label.import-btn input[type="file"] {
+  display: none;
+}
+
+/* Groups top bar: remove export/backup/restore/persist bar, add group-order toolbar */
+#groups > .actions:first-of-type {
+  display: none !important;
+}
+#groups .group-order-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+#groups #toggleGroupOrder {
+  background: var(--brand-soft);
+  border: 2px solid var(--brand);
+  color: var(--brand-press);
+  font-weight: 700;
+  min-height: 44px;
+  padding: 8px 14px;
+}
+#groups #toggleGroupOrder[aria-pressed="true"] {
+  background: var(--brand) !important;
+  color: #ffffff !important;
+}
+#groupList article .group-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+#groupList article .group-order-controls {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+#groupList article .group-order-controls button {
+  min-height: 38px !important;
+  padding: 4px 10px !important;
+  font-size: 0.84rem !important;
+  font-weight: 700 !important;
+  margin: 0 !important;
+}
 main {
   padding-top: 12px;
   padding-bottom: 48px;
