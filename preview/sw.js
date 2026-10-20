@@ -38,7 +38,7 @@ self.addEventListener('install',event=>event.waitUntil((async()=>{
   const digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(n=>n.toString(16).padStart(2,'0')).join('');
   if(digest!==INTEGRITY[path])throw Error('Shell version mismatch: '+path);
   return [canonical.href,response];
- })));
+ }));
  if(!verified.length)throw Error('Missing shell integrity manifest; run build.mjs');
  const cache=await caches.open(CACHE);await Promise.all(verified.map(([url,response])=>cache.put(url,response)));
 })()));
