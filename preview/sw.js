@@ -5,7 +5,7 @@ const INTEGRITY={
  "./index.html": "8e91fb6cad0ee229cd0707262a43d3979f4116d133474b15b36d4ed74aa56e09",
  "../style.css": "3943720bf1123c3cdf727b36c4a9b6be568d90a0741316b7465db9d37c4ba420",
  "./workflow.css": "9f2b00cfd3bf250f2ed598046522fd65ce580ff10e50213c910dfd8e2b4b361f",
- "./app.js": "165289198d89ac6ebed90ae86ce3eb22627067dfa1d2e1b48f7765d78777d3c1",
+ "./app.js": "b62e4add5b67ae70753d98169d9d70822cedd0add5f8d194fba434818c56ff36",
  "../ordering.js": "1df286ffe66ecb31bc2c42d91e0d515774ed919ed4236679d5ab8f3489f80d9a",
  "../work-phrases.js": "54bb2f94b16911328fc0eba827ebf5ae4fe3d0b5e28c624b8f3227b3456a5c70",
  "../area-reference.js": "19a7d66c3d092d380cc2c37a0bf51745451f1d74f51a70fb2e8f9b39cbfb0a5b",
@@ -23,7 +23,8 @@ const INTEGRITY={
  "../icons/app-512.png": "4657a5b074e22cef9cbd21acafe26703a3569406d27561e450ea535c5aab4c52",
  "../icons/app-maskable-512.png": "185c45d4063b7dfa85be9a1cacca92b6b27498fe8d4257df2cfe0cece66c1209",
  "../icons/apple-touch-icon.png": "c95d02db8d3c462abbda75b312861b1fad6e6f67591867d233921d4de70e6b4b",
- "./": "8e91fb6cad0ee229cd0707262a43d3979f4116d133474b15b36d4ed74aa56e09"
+ "./": "8e91fb6cad0ee229cd0707262a43d3979f4116d133474b15b36d4ed74aa56e09",
+ "../app.js": "e5b6a88979db40e9eca8e51620d826d1627e87b24aa7f29d93526ed01044cd03"
 };
 /* SHELL_INTEGRITY_END */
 const FILES=Object.keys(INTEGRITY);
