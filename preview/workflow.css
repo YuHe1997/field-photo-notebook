@@ -1,0 +1,755 @@
+/* ==========================================================================
+   現地照片筆記 — 介面設計層（田野筆記風格）
+   載入順序在 style.css 之後；style.css 保留相機全螢幕介面與舊版版面規則。
+   結構：1 設計變數 · 2 基礎 · 3 按鈕/表單 · 4 頁首與導覽 · 5 各分頁 · 6 對話視窗 · 7 相機外觀
+   ========================================================================== */
+
+/* 1 ─ 設計變數 ───────────────────────────────────────────────────────────── */
+:root {
+  --paper: #f4efe4;
+  --paper-2: #ebe4d3;
+  --surface: #fffdf8;
+  --surface-2: #f8f3e8;
+  --line: #ddd3bf;
+  --line-strong: #8c836c;
+  --ink: #231f18;
+  --ink-2: #4a4335;
+  --ink-muted: #675e4d;
+  --brand: #1a4a3c;
+  --brand-press: #123629;
+  --brand-soft: #e1ebdc;
+  --clay: #b0502a;
+  --clay-press: #8e3e20;
+  --clay-soft: #f6e4d6;
+  --danger: #a3262a;
+  --danger-soft: #fbe6e3;
+  --warn-bg: #fbefd2;
+  --warn-ink: #5e3b06;
+
+  --radius-s: 10px;
+  --radius: 14px;
+  --radius-l: 20px;
+  --shadow-1: 0 1px 2px rgba(60, 45, 20, .06), 0 3px 10px rgba(60, 45, 20, .06);
+  --shadow-2: 0 -6px 24px rgba(60, 45, 20, .14);
+  --nav-h: 64px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+
+  /* style.css 仍引用的舊變數，對應到新色票 */
+  --bg: var(--paper);
+  --ui-canvas: var(--paper);
+  --ui-surface: var(--surface);
+  --ui-soft: var(--paper-2);
+  --ui-ink: var(--ink);
+  --ui-muted: var(--ink-muted);
+  --ui-line: var(--line);
+  --ui-control: var(--line-strong);
+  --ui-focus: var(--brand);
+  --ui-accent: var(--brand-soft);
+  --ui-accent-ink: var(--brand);
+
+  font-family: system-ui, -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  font-size: 16px;
+  color: var(--ink);
+  background: var(--paper);
+  font-variant-numeric: tabular-nums;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* 2 ─ 基礎 ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  background-color: var(--paper);
+  /* 極淡的方格，呼應考古探方 */
+  background-image:
+    linear-gradient(rgba(26, 74, 60, .045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(26, 74, 60, .045) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+header, main, footer, #status { width: 100%; max-width: 760px; margin: 0 auto; padding: 16px; }
+header { padding-bottom: 4px; background: transparent; box-shadow: none; border: 0; color: var(--ink); }
+main { padding-top: 12px; padding-bottom: calc(var(--nav-h) + var(--safe-b) + 28px); }
+
+h1 { font-size: 20px; line-height: 1.25; font-weight: 750; letter-spacing: .02em; margin: 0; }
+h2 { font-size: 24px; line-height: 1.3; font-weight: 750; margin: 4px 0 6px; letter-spacing: .01em; }
+h3 { font-size: 18px; line-height: 1.4; font-weight: 700; margin: 24px 0 12px; }
+p { line-height: 1.65; margin: 8px 0 14px; }
+a { color: var(--brand); text-underline-offset: 3px; }
+small, .export-note, .photo-info, .photo-area-reference, figcaption { color: var(--ink-muted); }
+.export-note { font-size: 14px; }
+figcaption { font-size: 12px; line-height: 1.6; }
+
+footer {
+  font-size: 13px;
+  color: var(--ink-muted);
+  text-align: center;
+  padding-bottom: calc(var(--nav-h) + var(--safe-b) + 24px);
+}
+
+main > section > h2 { margin-top: 4px; }
+
+/* 3 ─ 按鈕與表單 ─────────────────────────────────────────────────────────── */
+button:not(.camera-overlay *),
+input:not(.camera-overlay *),
+textarea:not(.camera-overlay *),
+select:not(.camera-overlay *) {
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink);
+  min-height: 46px;
+  border-radius: var(--radius-s);
+  box-shadow: none;
+}
+
+/* 預設＝次要按鈕 */
+button:not(.camera-overlay *) {
+  padding: 9px 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  font-weight: 600;
+  letter-spacing: .01em;
+  cursor: pointer;
+  transition: background-color .14s ease, border-color .14s ease, color .14s ease, transform .08s ease, box-shadow .14s ease;
+}
+button:not(.camera-overlay *):active:enabled { transform: scale(.98); }
+@media (hover: hover) {
+  button:not(.camera-overlay *):hover:enabled { background: var(--brand-soft); border-color: var(--brand); }
+}
+button:not(.camera-overlay *)[aria-pressed=true] {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand);
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--brand);
+}
+button:not(.camera-overlay *):disabled {
+  opacity: 1 !important;
+  background: var(--paper-2) !important;
+  color: #7a705c !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+}
+
+/* 主要按鈕：深綠實心 */
+#start, #compose, #save, #appendMaster, #appendToEditor, #downloadWord, #uploadPhotosToDrive,
+#installHomeScreen, #finishMasterSetup, #prepareWord, #folderSelectCurrent, #exportMonDocx {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  font-weight: 700;
+}
+#start, #compose, #save, #appendMaster, #appendToEditor, #downloadWord, #uploadPhotosToDrive { width: 100%; min-height: 54px; font-size: 17px; }
+@media (hover: hover) {
+  #start:hover:enabled, #compose:hover:enabled, #save:hover:enabled, #appendMaster:hover:enabled,
+  #appendToEditor:hover:enabled, #downloadWord:hover:enabled, #uploadPhotosToDrive:hover:enabled,
+  #installHomeScreen:hover:enabled, #finishMasterSetup:hover:enabled, #prepareWord:hover:enabled,
+  #folderSelectCurrent:hover:enabled, #exportMonDocx:hover:enabled { background: var(--brand-press); border-color: var(--brand-press); }
+}
+#start { box-shadow: 0 6px 16px rgba(26, 74, 60, .28); }
+
+/* 次要強調：淺綠底 */
+#loginMonthMaster, #connectDrive, #checkMaster, #fillMonTemplate, #viewPhotoCoordinates,
+#toggleGroupOrder, .import-btn, #browseMasterDocuments, #browseDriveFolders, #browseMonitoringDriveFolders,
+#createNewSubfolder, #copyHomeScreenUrl {
+  background: var(--brand-soft);
+  border-color: #9db79f;
+  color: var(--brand);
+}
+@media (hover: hover) {
+  #loginMonthMaster:hover:enabled, #connectDrive:hover:enabled, #checkMaster:hover:enabled, #fillMonTemplate:hover:enabled,
+  #viewPhotoCoordinates:hover:enabled, #toggleGroupOrder:hover:enabled, .import-btn:hover { background: #d3e3cc; border-color: var(--brand); }
+}
+
+/* 危險動作 */
+.danger, #deleteSelected {
+  background: var(--surface) !important;
+  color: var(--danger) !important;
+  border: 1px solid var(--danger) !important;
+}
+.danger:disabled, #deleteSelected:disabled {
+  background: var(--paper-2) !important;
+  color: #7a705c !important;
+  border: 1px solid var(--line) !important;
+}
+
+/* 輸入欄位 */
+input:not(.camera-overlay *), textarea:not(.camera-overlay *), select:not(.camera-overlay *) {
+  padding: 11px 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  transition: border-color .14s ease, box-shadow .14s ease;
+}
+input:not(.camera-overlay *):focus, textarea:not(.camera-overlay *):focus, select:not(.camera-overlay *):focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(26, 74, 60, .18);
+}
+input::placeholder, textarea::placeholder { color: #7d745f; opacity: 1; }
+input[readonly] { background: var(--paper-2); color: var(--ink-2); }
+input[type=checkbox]:not(.camera-overlay *) { width: 24px !important; height: 24px; min-height: 24px; flex-shrink: 0; accent-color: var(--brand); }
+label { font-size: 16px; }
+textarea:not(.camera-overlay *) { line-height: 1.6; }
+
+button:not(.camera-overlay *):focus-visible, input:not(.camera-overlay *):focus-visible,
+textarea:not(.camera-overlay *):focus-visible, select:not(.camera-overlay *):focus-visible,
+summary:focus-visible, a:focus-visible, .import-btn:focus-within {
+  outline: 3px solid var(--clay);
+  outline-offset: 2px;
+}
+
+summary { min-height: 44px; padding: 12px 0; line-height: 1.5; }
+details { min-width: 0; }
+
+/* 4 ─ 頁首、今日卡片、底部導覽 ───────────────────────────────────────────── */
+.app-title-row { display: flex; align-items: center; gap: 12px; }
+.app-mark { width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0; box-shadow: var(--shadow-1); }
+.app-title-text { flex: 1; min-width: 0; }
+.app-sub { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-muted); line-height: 1.3; letter-spacing: .04em; }
+#homeScreenHelp {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 6px 12px;
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--ink-2);
+  border-color: var(--line);
+  border-radius: 999px;
+}
+
+/* 今日卡片：深綠，全頁視覺重心 */
+.today-card {
+  margin-top: 14px;
+  padding: 14px 14px 12px;
+  color: #fff;
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(255, 255, 255, .10), transparent 55%),
+    var(--brand);
+  border-radius: var(--radius-l);
+  box-shadow: 0 8px 22px rgba(26, 74, 60, .24);
+}
+.work-days { display: flex; gap: 10px; align-items: flex-end; flex-wrap: nowrap; margin: 0; }
+.work-days label { flex: 1; min-width: 0; margin: 0; font-size: 12.5px; letter-spacing: .06em; color: rgba(255, 255, 255, .82); }
+.work-days select:not(.camera-overlay *) {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  font-weight: 650;
+  background: #fff;
+  border-color: transparent;
+}
+#newDay:not(.camera-overlay *) {
+  flex-shrink: 0;
+  margin: 0;
+  background: var(--clay);
+  border-color: var(--clay);
+  color: #fff;
+  font-weight: 700;
+}
+@media (hover: hover) { #newDay:not(.camera-overlay *):hover:enabled { background: var(--clay-press); border-color: var(--clay-press); } }
+
+#currentDay {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 12px 0 0;
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+#currentDay span {
+  white-space: nowrap;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .15);
+  color: #fff;
+  font-weight: 600;
+}
+/* 第一個 span 是日期，與下拉選單重複；保留給輔助科技，視覺上隱藏 */
+#currentDay span:first-child {
+  position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+#tutorial { margin: 10px 0 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); padding: 0 14px; line-height: 1.6; }
+#tutorial summary { font-size: 14px; font-weight: 650; color: var(--ink-2); min-height: 44px; padding: 10px 0; }
+#tutorial ol { padding-left: 22px; margin: 4px 0 10px; }
+#tutorial li { margin: 6px 0; font-size: 14.5px; }
+#tutorial p { font-size: 14px; overflow-wrap: anywhere; }
+#tutorial details summary { font-size: 14px; }
+
+/* 底部導覽 */
+header nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px;
+  padding: 6px max(8px, calc((100% - 760px) / 2 + 8px)) calc(6px + var(--safe-b));
+  background: rgba(255, 253, 248, .95);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line);
+  box-shadow: var(--shadow-2);
+}
+header nav button:not(.camera-overlay *) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 52px;
+  padding: 6px 2px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+header nav button:not(.camera-overlay *) .tab-icon { width: 24px; height: 24px; transition: transform .16s ease; }
+header nav button:not(.camera-overlay *):hover:enabled:not([aria-pressed=true]) { background: var(--paper); border-color: transparent; }
+header nav button:not(.camera-overlay *)[aria-pressed=true] {
+  color: var(--brand);
+  background: var(--brand-soft);
+  box-shadow: none;
+  font-weight: 750;
+}
+header nav button:not(.camera-overlay *)[aria-pressed=true] .tab-icon { transform: translateY(-1px) scale(1.08); }
+header nav button:focus-visible:not(.camera-overlay *) { outline-offset: -3px; }
+#editingTab { display: none !important; }
+
+/* 5 ─ 各分頁 ────────────────────────────────────────────────────────────── */
+
+/* 狀態訊息 */
+#status {
+  margin: 12px auto 0;
+  padding: 12px 16px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+  border-left: 4px solid var(--clay);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  max-width: calc(760px - 32px);
+  width: calc(100% - 32px);
+}
+#status:empty, #photoDriveStatus:empty, #driveStatus:empty, #driveResult:empty, #masterStatus:empty { display: none; }
+#globalRetry { margin: 8px 16px; }
+
+/* ── 拍攝 ── */
+#cameraGuide {
+  padding: 20px 18px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  text-align: center;
+}
+.camera-hero { display: flex; justify-content: center; margin: 2px 0 8px; }
+.camera-hero svg { width: min(220px, 70%); height: auto; }
+#cameraGuide h2 { margin: 6px 0 4px; }
+.camera-orient {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 12px;
+  padding: 6px 12px;
+  font-size: 14.5px;
+  line-height: 1.4;
+  color: var(--clay-press);
+  background: var(--clay-soft);
+  border-radius: 999px;
+}
+.perm-chips { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0 0 18px; padding: 0; }
+.perm-chips li {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+  color: var(--ink-2);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.perm-chips li::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--brand); vertical-align: 1px; }
+#cameraGuide .actions { margin-top: 0; width: 100%; }
+#cameraGuide p#sensorGuide { text-align: left; font-size: 13.5px; color: var(--ink-muted); }
+
+/* ── 待整理照片 ── */
+.photo-compose-hint, #photos .photo-compose-hint { margin: 0 0 12px; font-size: 14.5px; color: var(--ink-muted); }
+.photos-top-tools { display: flex; gap: 10px; margin: 14px 0 12px; align-items: stretch; }
+.photos-top-tools > * { flex: 1; min-width: 0; }
+.import-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 8px;
+  min-height: 46px;
+  text-align: center;
+  font-weight: 650;
+  font-size: 16px;
+  border: 1px solid #9db79f;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+.import-btn input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+
+#areaDatasetNote { margin: 20px 0 0; padding: 10px 12px; font-size: 13px; line-height: 1.6; border-radius: var(--radius-s); background: var(--surface-2); border: 1px dashed var(--line); }
+
+#gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+#gallery:empty::before {
+  content: "還沒有待整理的照片\A到「拍攝」按下快門，或從相簿加入";
+  white-space: pre-line;
+  grid-column: 1 / -1;
+  padding: 92px 20px 28px;
+  text-align: center;
+  line-height: 1.7;
+  font-size: 15px;
+  color: var(--ink-muted);
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius-l);
+  background: var(--surface) no-repeat center 24px / 56px 56px
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a4a3c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='14' rx='2'/%3E%3Ccircle cx='8.5' cy='10' r='1.6'/%3E%3Cpath d='m21 16-5-5-8 8'/%3E%3C/svg%3E");
+}
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+#gallery .card button {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink);
+  box-shadow: none;
+}
+#gallery .card button:hover:enabled { background: transparent; }
+#gallery .card button img { display: block; width: 100%; margin-bottom: 8px; aspect-ratio: 4 / 3; object-fit: contain; background: var(--paper-2); border-radius: 0; }
+.card:has(button[aria-pressed=true]) { border: 2px solid var(--brand); box-shadow: 0 0 0 3px rgba(26, 74, 60, .16), var(--shadow-1); }
+.card:has(button[aria-pressed=true])::after {
+  content: "✓";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+  pointer-events: none;
+}
+.card .photo-area-reference { margin: 0 8px 8px; padding: 0; border: 0; font-size: 12px; }
+.card summary { font-size: 12px; padding: 10px 0; min-height: 44px; }
+.gallery-coordinates { font-size: 12px; margin: auto 8px 8px; color: var(--ink-muted); }
+.photo-area-reference { border-color: var(--line); }
+
+/* 選取操作列：有選取時固定在導覽列上方 */
+.selection-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.selection-bar:has(#compose:enabled), .selection-bar:has(#appendToEditor:enabled:not([hidden])) {
+  position: sticky;
+  bottom: calc(var(--nav-h) + var(--safe-b) + 10px);
+  z-index: 40;
+  border-color: var(--brand);
+  box-shadow: 0 10px 30px rgba(35, 31, 24, .22);
+}
+.selection-bar > * { margin: 0; }
+.selection-bar #selectionCount { order: -1; font-size: 14px; font-weight: 650; color: var(--ink-2); }
+.selection-bar #returnToEditor, .selection-bar #appendToEditor { width: 100%; }
+.selection-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.selection-tools > button { min-height: 44px; padding: 8px 4px; font-size: 14px; width: 100%; }
+/* 尚未選取時：只留一行說明文字，不佔版面 */
+.selection-bar:has(#compose:disabled) { padding: 0; border: 0; background: none; box-shadow: none; }
+.selection-bar:has(#compose:disabled) :is(#compose, .selection-tools) { display: none; }
+
+/* ── 紀錄集 ── */
+.group-order-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding-bottom: 4px; }
+#groupOrderHint { font-size: 13.5px; color: var(--ink-muted); margin: 0; }
+.group-order-controls { display: flex; gap: 8px; margin-bottom: 12px; }
+
+article {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+#groupList > article { position: relative; padding: 16px 16px 14px 20px; margin: 14px 0; overflow: hidden; }
+#groupList > article::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 5px; background: var(--clay); }
+#groupList h3 { font-size: 19px; margin: 0 0 4px; }
+#groupList article > p { font-size: 14px; color: var(--ink-muted); margin: 0 0 10px; }
+#groupList .group-photos { gap: 8px; margin: 10px 0; }
+.group-photos img, .card img { background: var(--paper-2); }
+.group-photos img { border-radius: var(--radius-s); }
+#groupList details { margin: 4px 0; }
+#groupList details summary { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+#groupList article > .note-text {
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: var(--ink);
+  background: var(--surface-2);
+  border-radius: var(--radius-s);
+  border: 1px solid var(--line);
+}
+#groupList > article > button { margin: 4px 8px 0 0; }
+#groupList > p:only-child {
+  margin: 14px 0;
+  padding: 90px 20px 26px;
+  text-align: center;
+  font-size: 15px;
+  color: var(--ink-muted);
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--radius-l);
+  background: var(--surface) no-repeat center 24px / 56px 56px
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a4a3c' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7.5V6a1 1 0 0 1 1-1h5l2 2.5h8a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z'/%3E%3Cpath d='M3 11h18'/%3E%3C/svg%3E");
+}
+
+/* ── 編輯紀錄集 ── */
+#editor { border: 0; padding-top: 0; }
+#editor > p { font-size: 14.5px; color: var(--ink-muted); }
+#editor .editor-actions { display: flex; gap: 8px; }
+#save { order: -1; flex-basis: 100%; }
+#editor #addSelected, #editor #cancel { flex: 1; }
+#engineering { min-height: 150px; }
+#photoInfo article { padding: 12px; box-shadow: none; }
+#photoInfo h3 { font-size: 16px; }
+#photoInfo .photo-row-head { flex-wrap: wrap; }
+#order .editor-previews img { max-height: 220px; border-radius: var(--radius-s); }
+.phrase-panel { margin: 8px 0 14px; padding: 0 12px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); }
+.phrase-choice { background: var(--surface); }
+
+/* ── 監看表單 ── */
+#monitoring h3 { display: flex; align-items: center; gap: 10px; font-size: 18px; margin: 26px 0 12px; }
+.step-no {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  margin-right: -1em; /* 抵銷標題裡的全形空白 */
+  border-radius: 50%;
+  background: var(--clay);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+.step-card, #unifiedExport > section {
+  padding: 16px;
+  margin: 12px 0 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-l);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.step-card h3, #unifiedExport > section h3 { margin-top: 0; }
+.monitoring-template { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.monitoring-template > button { width: 100%; margin: 0; }
+.monitoring-template > button:nth-child(n+3) { grid-column: 1 / -1; }
+#masterSelectionStatus, #fillDisabledReason { margin: 8px 0; }
+
+#monForm fieldset { min-width: 0; margin: 14px 0 20px; padding: 18px 16px 8px; border: 1px solid var(--line); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-1); }
+#monForm legend { padding: 4px 12px; font-size: 13px; font-weight: 700; letter-spacing: .06em; color: var(--brand); background: var(--brand-soft); border-radius: 999px; }
+#monForm label { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
+#monForm input[type=text], #monForm textarea { font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface); }
+.mon-helper-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 8px; }
+.mon-helper-buttons button { font-size: 15px; min-height: 44px; padding: 8px 12px; }
+#viewPhotoCoordinates { margin-left: auto; }
+.sync-notice { background: var(--warn-bg); color: var(--warn-ink); border: 0; border-left: 4px solid var(--clay); border-radius: 0 var(--radius-s) var(--radius-s) 0; padding: 10px 12px; font-size: 14px; }
+#monStatus, #masterStatus, #photoDriveStatus, #driveStatus { font-size: 14.5px; font-weight: 600; color: var(--ink-2); }
+
+#unifiedExport { margin: 0; padding: 0; border: 0; }
+#unifiedExport > #driveExport { margin-top: -8px; }
+#masterExport > button, #photoDriveExport > #uploadPhotosToDrive { margin-top: 4px; }
+#photoDriveExport > button:first-of-type { margin-bottom: 4px; }
+.daily-folder-option { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-size: 15.5px; line-height: 1.5; }
+#photoDrivePath, #monitoringDrivePath { text-overflow: ellipsis; }
+#monitoringOtherExport { margin-top: 24px; padding: 0 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-l); }
+#monitoringOtherExport summary { font-weight: 700; padding: 14px 0; }
+#monitoringOtherExport .actions { gap: 8px; }
+#masterBuild { font-size: 12px; color: var(--ink-muted); }
+
+/* 一般資訊提示 */
+.sync-notice, .home-screen-storage-note { overflow-wrap: anywhere; }
+
+/* 6 ─ 對話視窗：手機為底部面板，寬螢幕置中 ─────────────────────────────── */
+:is(#exportDialog, #homeScreenDialog, #masterSetupDialog, #coordinateAlbumDialog, #folderBrowserDialog) {
+  position: fixed;
+  inset: auto 0 0 0;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 680px;
+  max-height: 92dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 20px 18px calc(22px + var(--safe-b));
+  border: 0;
+  border-radius: 24px 24px 0 0;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 -10px 40px rgba(35, 31, 24, .28);
+}
+:is(#exportDialog, #homeScreenDialog, #masterSetupDialog, #coordinateAlbumDialog, #folderBrowserDialog)::backdrop { background: rgba(35, 31, 24, .45); }
+@media (prefers-reduced-motion: no-preference) {
+  :is(#exportDialog, #homeScreenDialog, #masterSetupDialog, #coordinateAlbumDialog, #folderBrowserDialog)[open] { animation: sheet-up .24s cubic-bezier(.2, .8, .2, 1); }
+  :is(#exportDialog, #homeScreenDialog, #masterSetupDialog, #coordinateAlbumDialog, #folderBrowserDialog)[open]::backdrop { animation: fade-in .24s ease; }
+}
+@keyframes sheet-up { from { transform: translateY(40px); opacity: .6; } to { transform: none; opacity: 1; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (min-width: 720px) {
+  :is(#exportDialog, #homeScreenDialog, #masterSetupDialog, #coordinateAlbumDialog, #folderBrowserDialog) { inset: 0; margin: auto; border-radius: var(--radius-l); max-height: 88dvh; }
+}
+.export-topbar, .home-screen-heading, .coordinate-album-header, .dialog-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.export-topbar { position: static; background: transparent; border: 0; padding: 0; }
+.export-topbar h2, .home-screen-heading h2, .coordinate-album-header h2, .dialog-heading h3 { margin: 0; font-size: 20px; }
+.export-topbar button, .home-screen-heading button, .coordinate-album-header button, .dialog-heading button { flex-shrink: 0; min-height: 44px; border-radius: 999px; padding: 6px 16px; }
+.home-screen-storage-note { margin: 14px 0; padding: 14px; border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-ink); font-size: 14px; }
+.home-screen-storage-note p { margin: 6px 0 10px; }
+
+#folderBrowserCurrent { margin: 8px 0; font-size: 14px; color: var(--ink-2); overflow-wrap: anywhere; }
+#folderCreateControls { display: flex; gap: 8px; margin: 10px 0; }
+#folderCreateControls input { flex: 1; min-width: 0; }
+#folderBrowserStatus { font-size: 14px; color: var(--warn-ink); }
+#folderList, #exportRows { list-style: none; margin: 10px 0; padding: 0; }
+#folderList { max-height: 42vh; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+#folderList li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+#folderList li:last-child { border-bottom: 0; }
+#folderList li > span { flex: 1; min-width: 120px; font-weight: 600; overflow-wrap: anywhere; }
+#folderList li button { min-height: 44px; padding: 6px 12px; font-size: 14.5px; }
+.master-document-choice { border-bottom: 1px solid var(--line); }
+
+#exportRows li { padding: 12px; margin: 8px 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow-wrap: anywhere; }
+#exportRows label { display: flex; align-items: center; gap: 10px; margin: 0; min-height: 46px; font-weight: 650; }
+#exportRows p { font-size: 14px; margin: 4px 0 8px; white-space: pre-wrap; color: var(--ink-2); }
+#exportStatus { color: var(--warn-ink); }
+
+#coordinateAlbumList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-height: 56dvh; overflow: auto; margin-top: 12px; }
+.coordinate-thumbnail { width: 100%; padding: 8px; text-align: left; overflow-wrap: anywhere; border-radius: var(--radius); font-size: 14px; }
+.coordinate-thumbnail img { width: 100%; aspect-ratio: 4 / 3; height: auto; border-radius: 8px; object-fit: contain; background: var(--paper-2); }
+.coordinate-thumbnail strong, .coordinate-thumbnail small { display: block; }
+.coordinate-thumbnail small { font-size: 12px; font-weight: 400; color: var(--ink-muted); }
+.coordinate-image { max-width: 100%; max-height: 50dvh; object-fit: contain; border-radius: var(--radius-s); }
+
+/* 7 ─ 相機外觀（只改顏色與形狀；尺寸與定位維持 style.css） ───────────────── */
+.camera-topbar button {
+  background: rgba(20, 24, 21, .62);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: 999px;
+  font-weight: 650;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.camera-topbar #cameraClose { background: rgba(255, 255, 255, .92); color: var(--brand); border-color: transparent; }
+.camera-overlay input[type=range] { accent-color: #fff; }
+.camera-overlay-status { background: rgba(20, 24, 21, .62); color: #fff; border-radius: 999px; padding: 6px 12px; }
+.camera-overlay-status.is-notice { border-radius: var(--radius); background: rgba(20, 24, 21, .92); }
+.camera-zoom { background: rgba(20, 24, 21, .62); border-radius: var(--radius); padding: 6px 8px; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.camera-zoom label { color: #fff; }
+.camera-zoom button { background: rgba(255, 255, 255, .16); color: #fff; border: 1px solid rgba(255, 255, 255, .3); border-radius: 50%; }
+.camera-zoom button:disabled { background: rgba(255, 255, 255, .08); color: rgba(255, 255, 255, .5); border-color: rgba(255, 255, 255, .15); }
+.camera-shutter-row #shutter {
+  background: #fff;
+  color: var(--brand);
+  border: 4px solid var(--brand);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, .85), 0 6px 18px rgba(0, 0, 0, .4);
+  font-weight: 800;
+}
+.camera-shutter-row #shutter:disabled { background: rgba(255, 255, 255, .45); color: rgba(26, 74, 60, .6); border-color: rgba(26, 74, 60, .5); box-shadow: 0 0 0 4px rgba(255, 255, 255, .35); }
+.camera-shutter-row #shutter:active:enabled { transform: scale(.94); }
+.overlay-retry { background: var(--danger); border-color: #d6605f; border-radius: var(--radius-s); }
+.camera-details { border-radius: var(--radius); border-color: rgba(255, 255, 255, .22); }
+.camera-details button { background: rgba(255, 255, 255, .12); color: #fff; border-color: rgba(255, 255, 255, .3); border-radius: 999px; }
+
+/* 8 ─ 版面微調 ───────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  header, main, footer { padding-left: 14px; padding-right: 14px; }
+  #status { width: calc(100% - 28px); }
+  #groupList > article { padding: 14px 12px 12px 18px; }
+  .step-card, #unifiedExport > section { padding: 14px; }
+  #monForm fieldset { padding: 16px 12px 6px; }
+  .monitoring-template button { padding: 8px; }
+  .coordinate-album-header { flex-wrap: wrap; }
+  .today-card { padding: 12px; }
+  .work-days { gap: 8px; }
+  .work-days select:not(.camera-overlay *) { font-size: 15px; font-weight: 600; padding-left: 10px; padding-right: 2px; }
+  .work-days #newDay:not(.camera-overlay *) { padding: 9px 10px; font-size: 15px; }
+}
+
+/* 手機橫放（非相機）：壓縮頁首與導覽 */
+@media (orientation: landscape) and (max-height: 520px) {
+  :root { --nav-h: 48px; }
+  header nav button:not(.camera-overlay *) { flex-direction: row; gap: 8px; min-height: 40px; padding: 4px 6px; }
+  header nav button:not(.camera-overlay *) .tab-icon { width: 20px; height: 20px; }
+  .today-card { margin-top: 8px; padding: 10px 12px; }
+  #currentDay { margin-top: 8px; }
+  .app-sub { display: none; }
+  #cameraGuide { padding: 12px 16px; }
+  .camera-hero { display: none; }
+}
+
+/* 寬螢幕：導覽列改為置中的浮動膠囊 */
+@media (min-width: 720px) {
+  header nav {
+    left: 50%;
+    right: auto;
+    bottom: 16px;
+    width: min(560px, calc(100% - 32px));
+    padding: 6px;
+    transform: translateX(-50%);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *:not(.camera-overlay *) { transition: none !important; animation: none !important; }
+}
+
+/* 設定視窗：主要動作滿版 */
+#masterSetupDialog :is(#browseMasterDocuments, #finishMasterSetup, #connectDrive, #switchGoogleAccount) { width: 100%; }
+#masterSetupDialog #monitoringAuth .actions > button { flex: 1 1 160px; }
+#masterSetupDialog input, #masterSetupDialog select { width: 100%; }
+#masterSetupDialog p, #masterSelectionStatus { overflow-wrap: anywhere; }
