@@ -1,4 +1,5 @@
 import {validDay,workDayOf,numberedGroup} from './core.js';
+import {compareGroups} from './ordering.js';
 import {normalizeFullwidth} from './mon-numbering.js';
 
 // No phrase bank or new storage: suggestions are derived from committed local sources.
@@ -11,7 +12,7 @@ function combine(entries){
 }
 export function photoEngineeringPhrases(snapshot,day){
  if(!validDay(day))return [];const photos=new Map((snapshot?.photos||[]).map(p=>[p.id,p])),entries=[];
- for(const g of [...(snapshot?.groups||[])].sort((a,b)=>(a.createdAt??a.updatedAt??0)-(b.createdAt??b.updatedAt??0)||String(a.id).localeCompare(String(b.id)))){
+ for(const g of [...(snapshot?.groups||[])].sort(compareGroups)){
   if(typeof g.id!=='string'||typeof g.engineering!=='string'||!Array.isArray(g.photoIds)||!g.photoIds.length||new Set(g.photoIds).size!==g.photoIds.length)continue;
   // An explicit conflicting group day or mixed/missing photo days is not guessed away.
   if(g.workDay!=null&&g.workDay!==day||!g.photoIds.every(id=>{const p=photos.get(id);return p&&(validDay(p.workDay)||Number.isFinite(p.buttonPressedAt??p.capturedAt??p.importedAt??p.createdAt))&&workDayOf(p)===day;}))continue;

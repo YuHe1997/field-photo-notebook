@@ -89,30 +89,8 @@ export class MonitoringDraftManager {
   }
 
   getDraft(day) {
-    // If we have an in-memory copy:
-    // If read was blocked previously, check if storage has become accessible now
-    if (this.inMemoryCopies.has(day)) {
-      if (this.readBlockedDays.has(day) && this.storage) {
-        try {
-          const raw = this.storage.getItem(monKey(day));
-          this.readBlockedDays.delete(day);
-          this.baseRawStorage.set(day, raw);
-          if (raw) {
-            try {
-              const parsed = JSON.parse(raw);
-              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                // Merge disk data under current RAM edits (RAM edits take precedence)
-                const merged = { ...parsed, ...this.inMemoryCopies.get(day) };
-                this.inMemoryCopies.set(day, merged);
-              }
-            } catch {}
-          }
-        } catch {
-          // Still read-blocked
-        }
-      }
-      return this.inMemoryCopies.get(day);
-    }
+    // Navigation must not resolve a blocked read or discard recovery buffers.
+    if (this.inMemoryCopies.has(day)) return this.inMemoryCopies.get(day);
 
     if (!this.storage) {
       this.dayStatus.set(day, {
@@ -228,51 +206,50 @@ export class MonitoringDraftManager {
     }
 
     const baseRaw = this.baseRawStorage.get(day);
-    if (baseRaw !== undefined && currentDiskRaw !== null && currentDiskRaw !== baseRaw) {
-      let externalData = null;
-      try {
-        externalData = JSON.parse(currentDiskRaw);
-      } catch {}
-      this.conflictStorage.set(day, {
-        externalRaw: currentDiskRaw,
-        externalData,
-        localData: merged
-      });
-      this.dayStatus.set(day, {
-        status: '偵測到其他分頁已更新草稿；已暫停覆寫以保護外部最新資料。已保留本地變更，可匯出複製、放棄本地或確認強制覆寫。',
-        isError: true,
-        isUnsaved: true,
-        isConflict: true
-      });
-      return {
-        success: false,
-        reason: 'conflict',
-        externalRaw: currentDiskRaw,
-        externalData,
-        data: merged
-      };
+    if ((baseRaw !== undefined && currentDiskRaw !== baseRaw) || this.hasConflict(day)) {
+      return this.recordConflict(day, currentDiskRaw);
     }
+    return this.persistDraft(day, merged, currentDiskRaw);
+  }
 
-    // 5. Perform the actual write
+  recordConflict(day, raw) {
+    const previous = this.conflictStorage.get(day);
+    const externalHistory = [...new Set([...(previous?.externalHistory || []), ...(previous ? [previous.externalRaw] : []), raw])];
+    let externalData = null;
+    try { externalData = JSON.parse(raw); } catch {}
+    const data = this.inMemoryCopies.get(day) || {};
+    this.conflictStorage.set(day, { externalRaw: raw, externalData, externalHistory, localData: data });
+    this.dayStatus.set(day, {
+      status: '偵測到其他分頁已更新或刪除草稿；已暫停覆寫。請先匯出備份，再另按「確認覆寫衝突草稿」決定是否取代外部資料。',
+      isError: true, isUnsaved: true, isConflict: true
+    });
+    return { success: false, reason: 'conflict', externalRaw: raw, externalData, data };
+  }
+
+  // Compare again immediately before writing, then read back. This is optimistic
+  // protection, not a cross-process atomic localStorage transaction.
+  persistDraft(day, data, expectedRaw) {
     try {
-      const serialized = JSON.stringify(merged);
+      if (!this.storage) throw Error('無可用本機儲存');
+      const raw = this.storage.getItem(monKey(day));
+      if (raw !== expectedRaw) return this.recordConflict(day, raw);
+      const serialized = JSON.stringify(data);
       this.storage.setItem(monKey(day), serialized);
+      const persisted = this.storage.getItem(monKey(day));
+      if (persisted !== serialized) return this.recordConflict(day, persisted);
       this.baseRawStorage.set(day, serialized);
       this.conflictStorage.delete(day);
-      this.dayStatus.set(day, {
-        status: '草稿已自動儲存於本機。',
-        isError: false,
-        isUnsaved: false
-      });
-      return { success: true, data: merged };
+      this.corruptRawStorage.delete(day);
+      this.readBlockedDays.delete(day);
+      this.dayStatus.set(day, { status: '草稿已自動儲存於本機。', isError: false, isUnsaved: false });
+      return { success: true, data };
     } catch (e) {
-      const isQuota = e?.name === 'QuotaExceededError' || /quota/i.test(e?.message || '');
+      const quota = e?.name === 'QuotaExceededError' || /quota/i.test(e?.message || '');
       this.dayStatus.set(day, {
-        status: `草稿儲存失敗（${isQuota ? '容量配額已滿' : e.message || '寫入失敗'}，變更保留於記憶體中；可點擊重試或匯出複製草稿，重新整理將遺失）`,
-        isError: true,
-        isUnsaved: true
+        status: `草稿儲存失敗（${quota ? '容量配額已滿' : e.message || '寫入失敗'}）；記憶體變更與異常／衝突複本仍保留，可重試或匯出；重新整理將遺失未存變更。`,
+        isError: true, isUnsaved: true, isConflict: this.hasConflict(day), isCorrupt: this.hasCorrupt(day), isReadBlocked: this.isReadBlocked(day)
       });
-      return { success: false, reason: isQuota ? 'quota_exceeded' : 'write_error', error: e, data: merged };
+      return { success: false, reason: quota ? 'quota_exceeded' : 'write_error', error: e, data };
     }
   }
 
@@ -288,40 +265,14 @@ export class MonitoringDraftManager {
       return { success: false, reason: 'no_storage', data: inMem };
     }
 
-    try {
-      const serialized = JSON.stringify(inMem);
-      this.storage.setItem(monKey(day), serialized);
-      // Write succeeded! Now safely clear corrupt buffer
-      this.corruptRawStorage.delete(day);
-      this.baseRawStorage.set(day, serialized);
-      this.dayStatus.set(day, {
-        status: '草稿已確認覆寫並儲存於本機。',
-        isError: false,
-        isUnsaved: false
-      });
-      return { success: true, data: inMem };
-    } catch (e) {
-      // Write failed (quota exceeded or storage error)!
-      // Retain corruptRawStorage AND inMemoryCopies!
-      const isQuota = e?.name === 'QuotaExceededError' || /quota/i.test(e?.message || '');
-      this.dayStatus.set(day, {
-        status: `確認覆寫失敗（${isQuota ? '容量配額已滿' : e.message || '寫入失敗'}）；原始損毀草稿與記憶體變更均已完整保留於緩衝區，硬碟未替換。請重試或匯出複製。`,
-        isError: true,
-        isUnsaved: true,
-        isCorrupt: true
-      });
-      return { success: false, reason: isQuota ? 'quota_exceeded' : 'write_error', error: e, data: inMem };
-    }
+    return this.persistDraft(day, inMem, this.corruptRawStorage.get(day));
   }
 
-  forceOverwriteConflict(day) {
+  forceOverwriteConflict(day, expectedRaw = this.conflictStorage.get(day)?.externalRaw) {
     if (!this.conflictStorage.has(day)) {
       return this.saveDraft(day, this.inMemoryCopies.get(day) || {});
     }
-    const currentDiskRaw = this.storage ? this.storage.getItem(monKey(day)) : null;
-    this.baseRawStorage.set(day, currentDiskRaw);
-    this.conflictStorage.delete(day);
-    return this.saveDraft(day, this.inMemoryCopies.get(day) || {});
+    return this.persistDraft(day, this.inMemoryCopies.get(day) || {}, expectedRaw);
   }
 
   resolveConflictKeepExternal(day) {
@@ -337,25 +288,29 @@ export class MonitoringDraftManager {
     const local = this.inMemoryCopies.get(day) || {};
     const merged = { ...ext, ...local };
     this.inMemoryCopies.set(day, merged);
-    this.baseRawStorage.set(day, conflict?.externalRaw || null);
-    this.conflictStorage.delete(day);
-    return this.saveDraft(day, merged);
+    return this.persistDraft(day, merged, conflict ? conflict.externalRaw : this.baseRawStorage.get(day));
   }
 
   retryRead(day) {
     if (!this.storage) return { success: false, reason: 'no_storage' };
     try {
       const raw = this.storage.getItem(monKey(day));
-      this.readBlockedDays.delete(day);
-      this.baseRawStorage.set(day, raw);
       let parsed = null;
-      if (raw) {
-        parsed = JSON.parse(raw);
+      if (raw !== null) {
+        try {
+          parsed = JSON.parse(raw);
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw Error('異常格式');
+        } catch {
+          this.corruptRawStorage.set(day, raw);
+          this.dayStatus.set(day, { status: '讀取恢復，但草稿損毀／異常；原始字串與記憶體變更均保留，未覆寫。', isError: true, isUnsaved: this.inMemoryCopies.has(day), isCorrupt: true });
+          return { success: false, reason: 'corrupt_blocked', data: this.inMemoryCopies.get(day) };
+        }
       }
-      const mem = this.inMemoryCopies.get(day) || {};
-      const merged = parsed ? { ...parsed, ...mem } : mem;
-      this.inMemoryCopies.set(day, merged);
-      return this.saveDraft(day, merged);
+      this.readBlockedDays.delete(day);
+      if (this.inMemoryCopies.has(day) && raw !== this.baseRawStorage.get(day) && (raw !== null || this.baseRawStorage.has(day))) return this.recordConflict(day, raw);
+      if (!this.inMemoryCopies.has(day) && parsed) this.inMemoryCopies.set(day, parsed);
+      this.baseRawStorage.set(day, raw);
+      return this.saveDraft(day, this.inMemoryCopies.get(day) || {});
     } catch (e) {
       this.dayStatus.set(day, {
         status: `讀取草稿失敗（${e.message || '存取受阻'}）；已保留記憶體變更。`,
@@ -422,6 +377,7 @@ export class MonitoringDraftManager {
   }
 
   clearCache(day) {
+    if (this.hasUnsaved(day) || this.hasConflict(day) || this.hasCorrupt(day) || this.isReadBlocked(day)) return false;
     this.inMemoryCopies.delete(day);
     this.baseRawStorage.delete(day);
     this.corruptRawStorage.delete(day);
@@ -439,21 +395,8 @@ export class MonitoringDraftManager {
       return false;
     }
     const baseRaw = this.baseRawStorage.get(day);
-    if (baseRaw !== undefined && diskRaw !== null && diskRaw !== baseRaw) {
-      let externalData = null;
-      try { externalData = JSON.parse(diskRaw); } catch {}
-      const mem = this.inMemoryCopies.get(day) || {};
-      this.conflictStorage.set(day, {
-        externalRaw: diskRaw,
-        externalData,
-        localData: mem
-      });
-      this.dayStatus.set(day, {
-        status: '偵測到其他分頁已更新草稿；已暫停覆寫以保護外部最新資料。已保留本地變更，可匯出複製、放棄本地或確認強制覆寫。',
-        isError: true,
-        isUnsaved: true,
-        isConflict: true
-      });
+    if (baseRaw !== undefined && diskRaw !== baseRaw) {
+      this.recordConflict(day, diskRaw);
       return true;
     }
     return false;
@@ -475,20 +418,22 @@ export class MonitoringDraftManager {
         type: 'corrupt_raw',
         raw: corrupt,
         rawCorrupt: corrupt,
+        conflict: conflict || null,
         workingData: mem || null,
         workingJson: mem ? JSON.stringify(mem, null, 2) : null,
-        combinedText: combined
+        combinedText: combined + (conflict ? '\n\n=== 外部衝突複本 ===\n' + JSON.stringify(conflict, null, 2) : '')
       };
     }
 
     if (conflict) {
-      let combined = `=== 外部儲存區最新內容 ===\n${conflict.externalRaw}\n\n=== 本地未儲存變更內容 ===\n`;
+      let combined = `=== 外部儲存區最新內容（null 代表已刪除） ===\n${conflict.externalRaw}\n\n=== 外部版本複本 ===\n${JSON.stringify(conflict.externalHistory)}\n\n=== 本地未儲存變更內容 ===\n`;
       if (mem) {
         combined += JSON.stringify(mem, null, 2);
       }
       return {
         type: 'conflict_backup',
         externalRaw: conflict.externalRaw,
+        externalHistory: conflict.externalHistory,
         localData: mem,
         combinedText: combined
       };
@@ -534,7 +479,9 @@ export class MonitoringDraftManager {
     if (!saveResult.success) {
       statusMsg += '（注意：本機儲存未成功，已暫存於記憶體）';
     }
+    if (!saveResult.success) statusMsg += ' ' + (this.getStatus(day)?.status || '');
     this.dayStatus.set(day, {
+      ...this.getStatus(day),
       status: statusMsg,
       isError: !saveResult.success,
       isUnsaved: !saveResult.success
