@@ -590,7 +590,29 @@ article {
 #monForm input[type=text], #monForm textarea { font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface); }
 .mon-helper-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 8px; }
 .mon-helper-buttons button { font-size: 15px; min-height: 44px; padding: 8px 12px; }
-#viewPhotoCoordinates { margin-left: auto; }
+
+/* 作業項目欄：標題列右側放「參考照片」，編號工具列放在輸入框下方 */
+.field-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; }
+.field-title { min-width: 0; }
+#monForm .ref-link {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-weight: 650;
+  border-radius: 999px;
+}
+.number-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.number-tools button { width: 100%; background: var(--surface); }
+
+/* 文字框隨內容自動長高，不出現內部捲軸 */
+textarea.auto-grow:not(.camera-overlay *) { overflow: hidden; resize: none; }
+
+/* 手機鍵盤開啟時收起底部導覽，避免它浮到鍵盤上方 */
+body.keyboard-open header nav { display: none; }
 .sync-notice { background: var(--warn-bg); color: var(--warn-ink); border: 0; border-left: 4px solid var(--clay); border-radius: 0 var(--radius-s) var(--radius-s) 0; padding: 10px 12px; font-size: 14px; }
 #monStatus, #masterStatus, #photoDriveStatus, #driveStatus { font-size: 14.5px; font-weight: 600; color: var(--ink-2); }
 
