@@ -9,12 +9,16 @@ const edits=[
  ["   btn.style.cssText='min-height:36px;padding:4px 8px;font-size:0.85rem';\n",""],
  ["import {AREA_DATA} from './area-data.js';\n","import {AREA_DATA} from './area-data.js';\nimport {initFormFit} from './form-fit.js';\n"],
  ["const $=id=>document.getElementById(id);\n","const $=id=>document.getElementById(id);\ninitFormFit();\n"],
- ["$('closeCoordinateAlbum').onclick=()=>closeCoordinateAlbum();","$('viewPhotoCoordinatesPhrase').onclick=$('viewPhotoCoordinates').onclick;\n$('closeCoordinateAlbum').onclick=()=>closeCoordinateAlbum();"],
- ["for(const id of ['viewPhotoCoordinates',","for(const id of ['viewPhotoCoordinates','viewPhotoCoordinatesPhrase',"]
+ ["$('viewPhotoCoordinates').onclick=async()=>{","const openCoordinateAlbum=async(sourceId='monWorkScope')=>{"],
+ ["const ta=$('monWorkScope');coordinateReturn={day:context.day,","const ta=$(sourceId);coordinateReturn={id:sourceId,day:context.day,"],
+ ["$('closeCoordinateAlbum').onclick=()=>closeCoordinateAlbum();","$('viewPhotoCoordinates').onclick=()=>openCoordinateAlbum('monWorkScope');\n$('viewPhotoCoordinatesStrata').onclick=()=>openCoordinateAlbum('monStrata');\n$('closeCoordinateAlbum').onclick=()=>closeCoordinateAlbum();"],
+ ["for(const id of ['viewPhotoCoordinates',","for(const id of ['viewPhotoCoordinates','viewPhotoCoordinatesStrata',"],
+ ["const ta=$('monWorkScope');suppressScopeOffer=true;try{ta.focus({preventScroll:true})","const ta=$(back.id||'monWorkScope');suppressScopeOffer=true;try{ta.focus({preventScroll:true})"],
+ ["`App v37 /","`App v38 /"]
 ];
-// The phrase panel gets its own copy of the reference-photo button (same dialog, same handler).
-const refBtn=document.getElementById('viewPhotoCoordinates'),refreshBtn=document.getElementById('refreshPhotoPhrases');
-if(refBtn&&refreshBtn&&!document.getElementById('viewPhotoCoordinatesPhrase')){const copy=refBtn.cloneNode(true);copy.id='viewPhotoCoordinatesPhrase';refreshBtn.after(copy);}
+// The strata field gets its own reference-photo button (same dialog, same handler).
+{const refBtn=document.getElementById('viewPhotoCoordinates'),strata=document.getElementById('monStrata'),label=strata&&strata.closest('label');
+if(refBtn&&label&&!document.getElementById('viewPhotoCoordinatesStrata')){const head=document.createElement('span'),title=document.createElement('span'),copy=refBtn.cloneNode(true);head.className='field-head';title.className='field-title';copy.id='viewPhotoCoordinatesStrata';while(label.firstChild&&label.firstChild!==strata)title.append(label.firstChild);head.append(title,copy);label.prepend(head);}}
 for(const [from,to] of edits){if(!src.includes(from))throw Error('preview patch failed: '+from.slice(0,48));src=src.replace(from,()=>to);}
 src=src.replace(/from '\.\/([\w-]+\.js)'/g,(_,file)=>`from '${file==='form-fit.js'?here:root}${file}'`);
 await import(URL.createObjectURL(new Blob([src],{type:'text/javascript'})));
