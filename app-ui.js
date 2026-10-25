@@ -13,8 +13,7 @@ const edits=[
  ["const ta=$('monWorkScope');coordinateReturn={day:context.day,","const ta=$(sourceId);coordinateReturn={id:sourceId,day:context.day,"],
  ["$('closeCoordinateAlbum').onclick=()=>closeCoordinateAlbum();","$('viewPhotoCoordinates').onclick=()=>openCoordinateAlbum('monWorkScope');\n$('viewPhotoCoordinatesStrata').onclick=()=>openCoordinateAlbum('monStrata');\n$('closeCoordinateAlbum').onclick=()=>closeCoordinateAlbum();"],
  ["for(const id of ['viewPhotoCoordinates',","for(const id of ['viewPhotoCoordinates','viewPhotoCoordinatesStrata',"],
- ["const ta=$('monWorkScope');suppressScopeOffer=true;try{ta.focus({preventScroll:true})","const ta=$(back.id||'monWorkScope');suppressScopeOffer=true;try{ta.focus({preventScroll:true})"],
- ["`App v37 /","`App v38 /"]
+ ["const ta=$('monWorkScope');suppressScopeOffer=true;try{ta.focus({preventScroll:true})","const ta=$(back.id||'monWorkScope');suppressScopeOffer=true;try{ta.focus({preventScroll:true})"]
 ];
 for(const [from,to] of edits){if(!src.includes(from))throw Error('UI patch failed: '+from.slice(0,48));src=src.replace(from,()=>to);}
 src=src.replace(/from '\.\/([\w-]+\.js)'/g,(_,file)=>`from '${here}${file}'`);

@@ -1,5 +1,5 @@
 // User-initiated export only. Access tokens and the GIS client live in memory, never in backups.
-import {documentTabs,selectedTab,appendAnchor,verifyProtected,dailyTablePlan,structureRequests,newTable,mergeRequests,contentRequests,assertAppendOnly,namedMarker,logicalTableCells,masterHeadingTemplate,headingRangeText,chronologicalPlacement,insertedRecordTable,verifyInsertionProtected,assertRecordInsertion,sourceMonitoringDate,parseMonitoringDate} from './docs-append.js';
+import {documentTabs,selectedTab,appendAnchor,verifyProtected,dailyTablePlan,structureRequests,newTable,mergeRequests,contentRequests,assertAppendOnly,namedMarker,logicalTableCells,masterHeadingTemplate,headingRangeText,chronologicalPlacement,insertedRecordTable,verifyInsertionProtected,assertRecordInsertion,sourceMonitoringDate,parseMonitoringDate,replacedRecordExtent,replaceRecordRequests,assertRecordDeletion,verifyRecordRemoved} from './docs-append.js';
 export const CLIENT_ID='659642111191-16q64t5mbd32hba7um1gvqd3vmc4tn9p.apps.googleusercontent.com';
 const SCOPE='https://www.googleapis.com/auth/drive';
 const DOCX='application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -128,8 +128,13 @@ export async function createFolder(name,parentId=null){
  return res;
 }
 
+// Folder names follow the project's Minguo convention: 2026-10-25 -> 1151025.
+export function rocDayName(day){
+ const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(day||'');if(!m||Number(m[1])<1912)throw new DriveError('input','工作日格式無效。');
+ return `${Number(m[1])-1911}${m[2]}${m[3]}`;
+}
 export async function ensureDailyFolder(parentId,day){
- const folderName=day;
+ const folderName=rocDayName(day);
  const existing=await listSubfolders(parentId);
  const found=existing.find(f=>f.name===folderName);
  if(found)return found;
@@ -152,7 +157,7 @@ export function validateGoogleDocName(value){
 }
 export async function uploadDayDoc(day,docBlob,folderId=null,{name:customName}={}){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day))throw new DriveError('input','工作日格式無效。');
- const name=customName===undefined?`施工監看紀錄-${day}`:validateGoogleDocName(customName);
+ const name=customName===undefined?`施工監看紀錄-${rocDayName(day)}`:validateGoogleDocName(customName);
  if(folderId)await verifyFolder(folderId);
  const boundary=`fieldPhotoNotebook_${crypto.randomUUID().replaceAll('-','')}`;
  const meta={name,mimeType:GOOGLE_DOC};if(folderId)meta.parents=[folderId];
@@ -216,7 +221,7 @@ export async function inspectMaster(value){
  if(!tabs.length)throw new DriveError('api','Google 未回傳可操作的文件分頁。');
  return {file,document,tabs:tabs.map(t=>({id:t.id,title:t.title}))};
 }
-export async function appendMonitoringRecord({masterId,tabId,sourceId,day,recordDate=day,fingerprint,rowLayout,onProgress=()=>{},onJournal}){
+export async function appendMonitoringRecord({masterId,tabId,sourceId,day,recordDate=day,fingerprint,rowLayout,replace=false,onProgress=()=>{},onJournal}){
  if(!/^\d{4}-\d{2}-\d{2}$/.test(day)||!/^[a-f0-9]{64}$/.test(fingerprint))throw new DriveError('input','追加識別資料無效。');
  if(typeof onJournal!=='function')throw new DriveError('input','追加操作必須能保存本機操作紀錄。');
  if(masterId===sourceId)throw new DriveError('input','當日文件不可與母檔相同。');
@@ -227,7 +232,7 @@ export async function appendMonitoringRecord({masterId,tabId,sourceId,day,record
  const suffix=`${day}_${fingerprint}`,pending=`fpn_pending_${suffix}`,done=`fpn_done_${suffix}`;
  if(namedMarker(before,tabId,pending)||namedMarker(before,tabId,done))throw new DriveError('duplicate','母檔已有相同內容的追加標記。請開啟文件核對，不會重複追加。');
  const heading=masterHeadingTemplate(before,tabId);
- const placement=chronologicalPlacement(before,tabId,recordDate),anchor=placement.anchor,headingText=heading?.text||`\n監看紀錄 ${placement.date}\n`;
+ const placement=chronologicalPlacement(before,tabId,recordDate,{replace}),anchor=placement.anchor,headingText=heading?.text||`\n監看紀錄 ${placement.date}\n`;
  let current=before;
  const write=async(phase,requests,table=null)=>{
   if(typeof current.revisionId!=='string'||!current.revisionId)throw new DriveError('api','缺少目前母表版本，停止，未送出後續寫入。');
@@ -245,12 +250,24 @@ export async function appendMonitoringRecord({masterId,tabId,sourceId,day,record
  if(!namedMarker(current,tabId,done))throw new DriveError('api','追加完成標記未確認；請核對母檔，不會自動重試。');
  const expectedHeading=(heading?.text||`\n監看紀錄 ${placement.date}\n`).slice(1);
  if(headingRangeText(current,tabId,anchor+1,anchor+1+expectedHeading.length)!==expectedHeading)throw new DriveError('api','新增標題讀回不符，請核對副本；不自動重試。');
- const result=insertedRecordTable(before,current,tabId,placement).table;
+ const insertedNode=insertedRecordTable(before,current,tabId,placement),result={...insertedNode.table,startIndex:insertedNode.startIndex};
  let expectedText='',actualText='',expectedImages=0,actualImages=0;
  for(const row of plan.rows)for(const cell of row){expectedText+=cell.segments.filter(s=>s.kind==='text').map(s=>s.text).join('')+'\n';expectedImages+=cell.segments.filter(s=>s.kind==='image').length;}
  for(const [i,row] of result.tableRows.entries())for(const {cell} of logicalTableCells(row,plan.columns,plan.rows[i].map(c=>c.span)))for(const node of cell.content)for(const e of node.paragraph?.elements||[]){actualText+=e.textRun?.content||'';if(e.inlineObjectElement)actualImages++;}
  if(expectedText!==actualText||expectedImages!==actualImages)throw new DriveError('api','新增文字或照片數量核對不符，請檢查母檔；未刪除任何內容。');
  onJournal({phase:'verified',masterId,tabId,sourceId,day,recordDate:placement.date,fingerprint});
- return {name:checked.file.name,webViewLink:`https://docs.google.com/document/d/${encodeURIComponent(masterId)}/edit`,images:actualImages,rows:result.tableRows.length};
+ let replaced=false;
+ if(placement.replacing){
+  // The new record is already written and verified. Only now is the OLD record of the same date removed,
+  // in one guarded range, and read back. A failure here leaves both records (never none); no auto-retry.
+  const extent=replacedRecordExtent(current,tabId,placement.date,result.startIndex),requests=replaceRecordRequests(extent,tabId);
+  assertRecordDeletion(requests,tabId,extent);
+  if(typeof current.revisionId!=='string'||!current.revisionId)throw new DriveError('api','缺少目前母表版本，未刪除舊紀錄。');
+  onJournal({phase:'replace-deleting',masterId,tabId,sourceId,day,recordDate:placement.date,fingerprint});onProgress('刪除同日舊紀錄');
+  await docsApi(`https://docs.googleapis.com/v1/documents/${encodeURIComponent(masterId)}:batchUpdate`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({requests,writeControl:{requiredRevisionId:current.revisionId}})});
+  const afterDelete=await readGoogleDocument(masterId);verifyRecordRemoved(current,afterDelete,tabId,extent);
+  onJournal({phase:'replaced',masterId,tabId,sourceId,day,recordDate:placement.date,fingerprint});replaced=true;
+ }
+ return {replaced,name:checked.file.name,webViewLink:`https://docs.google.com/document/d/${encodeURIComponent(masterId)}/edit`,images:actualImages,rows:result.tableRows.length};
 }
 

@@ -22,7 +22,8 @@ body.camera-overlay-active{overflow:hidden}
 .camera-overlay-status.is-notice{position:absolute;top:52px;left:0;right:0;max-height:22dvh;overflow:auto;white-space:normal;overflow-wrap:anywhere;text-align:left;background:#263d34;color:#fff;padding:10px;box-sizing:border-box;pointer-events:auto}
 #cameraPreview{--camera-aspect:1.333333;position:absolute;inset:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden;margin:0;touch-action:manipulation}
 .camera-viewport{--camera-aspect:1.333333;overflow:hidden;position:relative;display:flex;align-items:center;justify-content:center;background:#000;border-radius:4px}
-#cameraOverlay #video, .camera-viewport video{width:100%!important;height:100%!important;max-height:none!important;aspect-ratio:auto!important;object-fit:fill!important;display:block!important;border-radius:0;transform-origin:center center}
+#cameraOverlay #video, .camera-viewport video{width:100%!important;height:100%!important;max-height:none!important;aspect-ratio:auto!important;object-fit:contain!important;display:block!important;border-radius:0;transform-origin:center center}
+.camera-rotor{position:absolute;left:50%;top:50%;width:var(--vw,100%);height:var(--vh,100%);transform:translate(-50%,-50%) rotate(var(--rot,0deg));transform-origin:center center;overflow:hidden}
 .overlay-retry{background:#8b2b18;color:#fff;border:1px solid #b73e27;border-radius:6px;padding:8px 12px;font-weight:bold;margin-bottom:6px;width:100%;min-height:42px}
 .focus-reticle{position:absolute;width:64px;height:64px;border:2px solid #ffcc00;border-radius:6px;transform:translate(-50%,-50%);pointer-events:none;box-sizing:border-box;z-index:10;animation:reticle-pulse 0.3s ease-out}
 .focus-reticle.unsupported{border-color:#888;border-style:dashed}
@@ -166,3 +167,12 @@ article,#monForm fieldset{box-shadow:0 2px 8px rgba(42,58,42,.04)}
 .coordinate-thumbnail{min-width:0;text-align:left;padding:8px;overflow-wrap:anywhere}.coordinate-thumbnail img{width:100%;height:130px;object-fit:contain;background:var(--ui-soft)}.coordinate-thumbnail strong,.coordinate-thumbnail small{display:block}.coordinate-source-note{display:-webkit-box!important;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .coordinate-image{width:100%;height:34dvh;object-fit:contain;touch-action:pan-y pinch-zoom;background:var(--ui-soft)}#coordinateAlbumPhoto h3{font-size:1rem;margin:12px 0 6px}#coordinateAlbumPhoto p,#coordinateAlbumDay,#coordinateAlbumStatus{margin:8px 0;font-size:.9rem}#coordinateAlbumStatus:empty{display:none}#coordinateAlbumDetail>.actions{margin-top:10px}#coordinateAlbumInfo{margin-top:12px}
 
+/* crop dialog */
+.crop-dialog{box-sizing:border-box;width:calc(100% - 16px);max-width:640px;max-height:calc(100dvh - 16px);padding:12px;border:1px solid #69877c;border-radius:12px;background:#f4f3ed;color:#19332f;overflow:auto}
+.crop-dialog h3{margin:0 0 8px}
+.crop-stage{display:flex;justify-content:center;background:#111;border-radius:8px;padding:4px}
+#cropCanvas{display:block;max-width:100%;max-height:52dvh;width:auto;height:auto;touch-action:none;cursor:grab;user-select:none}
+.crop-slider{display:block;margin:10px 0 2px;font-weight:600}
+.crop-slider input{display:block;width:100%;min-height:44px;margin:4px 0 0}
+#cropDetail{margin:4px 0 8px;font-size:.92rem;overflow-wrap:anywhere}
+.crop-nudge button{min-width:48px;min-height:44px}
