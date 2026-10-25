@@ -178,3 +178,36 @@ export function deriveCameraBearing({alpha,beta,gamma,source,absolute,accuracy,q
     horizontalStrength: Number(L.toFixed(3))
   };
 }
+
+// ---- non-destructive crop -------------------------------------------------------------------
+// A crop is a window {x,y,w,h} in normalised coordinates of the DISPLAYED (already rotated) photo. Because w and h are
+// the same fraction of the photo's width and height, the original aspect ratio (4:3) is always kept. Original bytes are never touched.
+export const MIN_CROP=0.3;
+const round4=n=>Math.round(n*10000)/10000;
+export function validCrop(c){
+  return !!c&&typeof c==='object'&&['x','y','w','h'].every(k=>Number.isFinite(c[k]))&&c.w>=MIN_CROP-1e-9&&c.w<=1+1e-9&&Math.abs(c.w-c.h)<=.002&&c.x>=-1e-9&&c.y>=-1e-9&&c.x+c.w<=1+1e-6&&c.y+c.h<=1+1e-6;
+}
+// scale = kept fraction (1 = whole photo); (cx,cy) = desired window centre; the window is clamped inside the photo.
+export function cropWindow(scale,cx=.5,cy=.5){
+  const s=Math.max(MIN_CROP,Math.min(1,scale));
+  return {x:round4(Math.max(0,Math.min(1-s,cx-s/2))),y:round4(Math.max(0,Math.min(1-s,cy-s/2))),w:round4(s),h:round4(s)};
+}
+export const moveCrop=(c,dx,dy)=>cropWindow(c.w,c.x+c.w/2+dx,c.y+c.h/2+dy);
+// null when the window is (practically) the whole photo, so "no crop" has one representation.
+export function normalizeCrop(c){return validCrop(c)&&c.w<.999?{x:round4(c.x),y:round4(c.y),w:round4(c.w),h:round4(c.h)}:null;}
+// Rotating the photo by `delta` degrees (clockwise, multiples of 90) carries the window with it.
+export function rotateCrop(c,delta){
+  if(!validCrop(c))return null;
+  const d=((delta%360)+360)%360;
+  if(d===0)return {...c};
+  if(d===90)return {x:round4(1-c.y-c.h),y:round4(c.x),w:c.h,h:c.w};
+  if(d===180)return {x:round4(1-c.x-c.w),y:round4(1-c.y-c.h),w:c.w,h:c.h};
+  if(d===270)return {x:round4(c.y),y:round4(1-c.x-c.w),w:c.h,h:c.w};
+  throw Error('裁切旋轉角度無效');
+}
+export function cropEdges(c){const p=n=>Math.round(n*100);return {left:p(c.x),right:p(1-c.x-c.w),top:p(c.y),bottom:p(1-c.y-c.h)};}
+export function cropSummary(c,width,height){
+  if(!validCrop(c))return '未裁切（完整照片）';
+  const e=cropEdges(c),px=width&&height?`，約 ${Math.round(width*c.w)}×${Math.round(height*c.h)} 像素`:'';
+  return `保留 ${Math.round(c.w*100)}%（往內縮 ${100-Math.round(c.w*100)}%）${px}；邊緣內縮：左 ${e.left}%、右 ${e.right}%、上 ${e.top}%、下 ${e.bottom}%`;
+}
