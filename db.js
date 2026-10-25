@@ -1,4 +1,4 @@
-import {workDayOf,validDay,validateGroup} from './core.js';
+import {workDayOf,validDay,validateGroup,validCrop,normalizeCrop,rotateCrop} from './core.js';
 import {compareGroups} from './ordering.js';
 let connection;
 export async function open(){if(connection)return connection;connection=await new Promise((resolve,reject)=>{const r=indexedDB.open('field-photo-notebook-v1',1);r.onupgradeneeded=()=>{for(const n of ['photos','assets','groups'])r.result.createObjectStore(n,{keyPath:'id'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('請關閉其他使用本工具的分頁'));});return connection;}
@@ -39,7 +39,10 @@ export const saveGroupOrder=(day,orderedIds)=>transaction(['photos','groups'],tx
  });
 });
 export const removeGroup=id=>transaction(['groups'],tx=>tx.objectStore('groups').delete(id));
-export const setPhotoRotation=(id,rotation)=>transaction(['photos'],tx=>{if(![0,90,180,270].includes(rotation))throw Error('旋轉角度無效');const store=tx.objectStore('photos'),r=store.get(id);r.onsuccess=checked(tx,()=>{if(!r.result)throw Error('照片已不存在，請重新整理');store.put({...r.result,displayRotation:rotation});});});
+// A saved crop window turns with the photo, so the same part stays framed.
+export const setPhotoRotation=(id,rotation,delta=0)=>transaction(['photos'],tx=>{if(![0,90,180,270].includes(rotation))throw Error('旋轉角度無效');const store=tx.objectStore('photos'),r=store.get(id);r.onsuccess=checked(tx,()=>{if(!r.result)throw Error('照片已不存在，請重新整理');const next={...r.result,displayRotation:rotation};if(validCrop(next.crop)){const c=delta?normalizeCrop(rotateCrop(next.crop,delta)):next.crop;if(c)next.crop=c;else delete next.crop;}store.put(next);});});
+// Non-destructive 4:3 crop window (normalised to the displayed photo). null removes it. Original bytes are never touched.
+export const setPhotoCrop=(id,crop)=>transaction(['photos'],tx=>{const value=crop===null?null:normalizeCrop(crop);if(crop!==null&&!value)throw Error('裁切範圍無效');const store=tx.objectStore('photos'),r=store.get(id);r.onsuccess=checked(tx,()=>{if(!r.result)throw Error('照片已不存在，請重新整理');const next={...r.result};if(value)next.crop=value;else delete next.crop;store.put(next);});});
 // Deletion is permanent but only for ungrouped originals. Check references INSIDE the same
 // transaction to protect a group another tab may have saved after the confirmation.
 export const deletePhotos=ids=>transaction(['photos','assets','groups'],tx=>{if(!ids.length||new Set(ids).size!==ids.length)throw Error('請選取照片');const r=tx.objectStore('groups').getAll();r.onsuccess=checked(tx,()=>{if(r.result.some(g=>g.photoIds.some(id=>ids.includes(id))))throw Error('照片已加入紀錄集，請先移出紀錄集再刪除');const p=tx.objectStore('photos').getAll();p.onsuccess=checked(tx,()=>{if(ids.some(id=>!p.result.some(x=>x.id===id)))throw Error('照片已變更，請重新整理');for(const id of ids){tx.objectStore('photos').delete(id);tx.objectStore('assets').delete(id);}});});});
