@@ -5,7 +5,7 @@ async function build(worker){
  if(!worker)return null;
  return new Promise(resolve=>{const channel=new MessageChannel(),timer=setTimeout(()=>{channel.port1.close();resolve(null);},700);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();resolve(event.data?.cache||null);};try{worker.postMessage({type:'GET_BUILD'},[channel.port2]);}catch{clearTimeout(timer);channel.port1.close();resolve(null);}});
 }
-const minimumRelease=Math.max(39,Number(new URL(location.href).searchParams.get('release'))||39);
+const minimumRelease=Math.max(40,Number(new URL(location.href).searchParams.get('release'))||40);
 const modern=value=>/^field-photo-notebook-shell-v\d+(?:-[a-f0-9]{16})?$/.test(value||'')&&Number(value.match(/-v(\d+)(?:-|$)/)[1])>=minimumRelease;
 button.onclick=async()=>{
  button.disabled=true;openApp.hidden=true;
