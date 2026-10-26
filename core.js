@@ -52,11 +52,14 @@ export function skyEdgeFromTilt({beta,gamma,previous=null}={}){
  if(horizontal===wasHorizontal)return raw;
  return (horizontal?Math.abs(ux)>=Math.abs(uy)*1.3:Math.abs(uy)>=Math.abs(ux)*1.3)?raw:previous;
 }
-// While the screen itself stays portrait (system rotation lock, or a browser that cannot rotate), the camera screen is
-// turned by this many degrees clockwise so that it still stands upright for the person holding the phone sideways.
-export function cameraFrameTurn({skyEdge,windowPortrait=true}={}){
- if(!windowPortrait||![90,270].includes(skyEdge))return 0;
- return (360-skyEdge)%360;
+// The camera screen is fixed to the phone like a camera with buttons. When the system rotates the screen along with the
+// phone (landscape window), the camera frame is turned back by this many degrees clockwise so that it stays exactly as in
+// portrait. The sensor decides; the reported screen angle is only a fallback. A window that is already portrait is never turned.
+export function cameraFrameTurn({skyEdge=null,screenAngle=null,windowPortrait=true}={}){
+ if(windowPortrait)return 0;
+ if(skyEdge===90||skyEdge===270)return (360-skyEdge)%360;
+ const top=screenAngle===270||screenAngle===-90?270:screenAngle===90?90:null;
+ return top===null?0:(360-top)%360;
 }
 export function cameraAutoRotation({width,height,screenAngle=null,beta=null,gamma=null,skyEdge:forced=null}={}){
  let skyEdge=[0,90,180,270].includes(forced)?forced:null;

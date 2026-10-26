@@ -205,20 +205,26 @@ $('cameraDetailsClose').onclick=()=>{setCameraDetails(false);$('cameraInfo').foc
 let previewRot=0,lastLayoutKey='',frameKey='',skyEdge=null;
 // Which phone edge points at the sky; null while there is no fresh sensor reading.
 function currentSky(){return deviceTilt&&Date.now()-deviceTilt.readingAt<=2000&&skyEdge!==null?skyEdge:null;}
+// Like a camera with buttons, the camera screen stays fixed to the phone. When the system rotates the screen along with the
+// phone (landscape window) the whole camera frame is turned back, so every control stays exactly where it was in portrait.
+function wantedFrameTurn(){
+  const overlay=$('cameraOverlay');if(!overlay)return 0;
+  return cameraFrameTurn({skyEdge:currentSky(),screenAngle:screen.orientation?.angle??window.orientation??null,windowPortrait:overlay.clientHeight>=overlay.clientWidth});
+}
+const frameTurnNow=()=>Number($('cameraFrame')?.dataset.turn)||0;
+// The preview is the camera's own view, fixed to the phone (it does not follow how the phone is held; the saved photo
+// is turned upright). A system that rotates the picture with the screen is turned back inside the frame as well.
 function desiredPreviewRotation(){
   const v=$('video');if(!v?.videoWidth||!v.videoHeight)return 0;
-  const tilt=deviceTilt&&Date.now()-deviceTilt.readingAt<=2000?deviceTilt:null;
-  if(!tilt||currentSky()===null)return tilt?previewRot:0;
-  return cameraAutoRotation({width:v.videoWidth,height:v.videoHeight,screenAngle:tilt.screenAngle??screen.orientation?.angle??window.orientation??null,skyEdge:currentSky()});
+  const turn=frameTurnNow();
+  return v.videoWidth>v.videoHeight&&turn?(360-turn)%360:0;
 }
-// The whole camera screen stays upright for the person holding the phone. A browser/OS that rotates the screen already
-// does this by itself; when the screen stays portrait (rotation lock, iPhone web apps) the screen is turned here.
 function updateCameraFrame(){
   const overlay=$('cameraOverlay'),frame=$('cameraFrame');if(!overlay||!frame||overlay.hidden)return;
   const W=overlay.clientWidth,H=overlay.clientHeight;if(!W||!H)return;
-  const turn=cameraFrameTurn({skyEdge:currentSky(),windowPortrait:H>=W}),fw=turn?H:W,fh=turn?W:H,wide=fw>fh&&fh<=520;
-  const key=[W,H,turn,wide].join('x');if(key===frameKey)return;frameKey=key;
-  frame.classList.toggle('is-turned',turn!==0);frame.dataset.turn=String(turn);frame.dataset.wide=String(wide);
+  const turn=wantedFrameTurn(),fw=turn?H:W,fh=turn?W:H;
+  const key=[W,H,turn].join('x');if(key===frameKey)return;frameKey=key;
+  frame.classList.toggle('is-turned',turn!==0);frame.dataset.turn=String(turn);
   frame.style.setProperty('--fw',fw+'px');frame.style.setProperty('--fh',fh+'px');frame.style.setProperty('--fr',turn+'deg');
 }
 function previewDimensions(){
@@ -407,7 +413,7 @@ async function handlePreviewTap(e){
   const viewport=$('cameraViewport'),video=$('video');if(!viewport||!video||!video.videoWidth)return;
   const vpRect=viewport.getBoundingClientRect(),reticle=$('focusReticle'),status=$('focusStatus');
   // The tap is on the screen; the picture lives in the (possibly turned) camera screen: bring the tap into that frame.
-  const turnNow=Number($('cameraFrame')?.dataset.turn)||0,theta=turnNow*Math.PI/180,dx=e.clientX-(vpRect.left+vpRect.width/2),dy=e.clientY-(vpRect.top+vpRect.height/2);
+  const turnNow=frameTurnNow(),theta=turnNow*Math.PI/180,dx=e.clientX-(vpRect.left+vpRect.width/2),dy=e.clientY-(vpRect.top+vpRect.height/2);
   const vpW=viewport.offsetWidth,vpH=viewport.offsetHeight,tapX=vpW/2+dx*Math.cos(theta)+dy*Math.sin(theta),tapY=vpH/2-dx*Math.sin(theta)+dy*Math.cos(theta);
   const inVp=tapX>=0&&tapX<=vpW&&tapY>=0&&tapY<=vpH;
   if(!inVp){if(status)status.textContent='點按位置在黑邊（letterbox）區域，請點按鏡頭影像區域';return;}
@@ -518,7 +524,7 @@ function onOrientation(e){
   if(Number.isFinite(e.beta)&&Number.isFinite(e.gamma)){
     deviceTilt={beta:e.beta,gamma:e.gamma,readingAt:Date.now(),screenAngle:screen.orientation?.angle??window.orientation??null};
     skyEdge=skyEdgeFromTilt({beta:e.beta,gamma:e.gamma,previous:skyEdge});
-    if(desiredPreviewRotation()!==previewRot||cameraFrameTurn({skyEdge:currentSky(),windowPortrait:$('cameraOverlay').clientHeight>=$('cameraOverlay').clientWidth})!==(Number($('cameraFrame')?.dataset.turn)||0))previewDimensions();
+    if(wantedFrameTurn()!==frameTurnNow())previewDimensions();
   }else if(!e.isTrusted){
     deviceTilt=null;
   }
@@ -1479,7 +1485,7 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
-if($('masterBuild'))$('masterBuild').textContent=`App v40 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+if($('masterBuild'))$('masterBuild').textContent=`App v41 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
 $('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}

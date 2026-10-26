@@ -12,10 +12,9 @@
 .work-days{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.work-days label{flex:1;min-width:180px}.work-days select{display:block;font:inherit;min-height:46px;width:100%;max-width:100%;color:#19332f;background:white;border-radius:8px}.card img,.group-photos img{height:auto;aspect-ratio:4/3;object-fit:contain;background:#eef1eb}input[readonly]{background:#edf1e8;color:#19332f}#video{aspect-ratio:4/3;object-fit:contain}
 .actions{display:flex;gap:8px;flex-wrap:wrap}
 .camera-frame{--p-top:env(safe-area-inset-top);--p-right:env(safe-area-inset-right);--p-bottom:env(safe-area-inset-bottom);--p-left:env(safe-area-inset-left);position:absolute;inset:0}
-/* The screen stays portrait (rotation lock, iPhone web app) but the phone is held sideways: app.js turns this frame upright. */
+/* The system rotated the screen with the phone: app.js turns this frame back so the camera screen stays fixed to the phone. */
 .camera-frame.is-turned{inset:auto;left:50%;top:50%;width:var(--fw);height:var(--fh);transform:translate(-50%,-50%) rotate(var(--fr))}
-.camera-frame[data-turn="270"]{--p-top:env(safe-area-inset-right);--p-right:env(safe-area-inset-bottom);--p-bottom:env(safe-area-inset-left);--p-left:env(safe-area-inset-top)}
-.camera-frame[data-turn="90"]{--p-top:env(safe-area-inset-left);--p-right:env(safe-area-inset-top);--p-bottom:env(safe-area-inset-right);--p-left:env(safe-area-inset-bottom)}
+.camera-frame.is-turned{--p-top:0px;--p-right:0px;--p-bottom:0px;--p-left:0px}
 /* Camera Full-Viewport Overlay */
 .camera-overlay{position:fixed;inset:0;width:100vw;width:100dvw;height:100vh;height:100dvh;z-index:1000;background:#000;color:#f4f3ed;box-sizing:border-box;overflow:hidden;touch-action:pan-x pan-y}
 body.camera-overlay-active{overflow:hidden}
@@ -54,17 +53,6 @@ body.camera-overlay-active{overflow:hidden}
 .camera-details button{min-height:44px}
 .camera-details p{font-size:.85rem;line-height:1.5}
 .camera-sensor-readings{color:#b8c7be}
-/* Wide (phone held sideways): picture on the left, zoom and shutter in their own column on the right. */
-.camera-frame[data-wide="true"] #cameraPreview{width:calc(100% - 208px)}
-.camera-frame[data-wide="true"] .camera-topbar{right:calc(208px + max(8px,var(--p-right)))}
-.camera-frame[data-wide="true"] .camera-controls{left:auto;transform:none;right:max(8px,var(--p-right));top:max(8px,var(--p-top));bottom:max(8px,var(--p-bottom));width:192px;max-width:none;max-height:none;padding:6px;display:flex;flex-direction:column;justify-content:center;align-items:stretch;gap:14px}
-.camera-frame[data-wide="true"] .camera-zoom{padding:8px}
-.camera-frame[data-wide="true"] .zoom-controls{grid-template-columns:1fr 1fr;gap:8px}
-.camera-frame[data-wide="true"] .zoom-controls input[type=range]{grid-column:1/-1;grid-row:1;width:100%}
-.camera-frame[data-wide="true"] .zoom-controls #zoomOut{grid-column:1;grid-row:2}
-.camera-frame[data-wide="true"] .zoom-controls #zoomIn{grid-column:2;grid-row:2}
-.camera-frame[data-wide="true"] .focus-status{bottom:max(8px,var(--p-bottom));left:max(8px,var(--p-left));transform:none;max-width:calc(100% - 240px)}
-.camera-frame[data-wide="true"] .camera-details{bottom:max(8px,var(--p-bottom));right:calc(208px + max(8px,var(--p-right)))}
 #exportDialog{box-sizing:border-box;width:calc(100% - 24px);max-width:780px;max-height:90vh;overflow:auto;padding:16px;border:1px solid #69877c;border-radius:12px;background:#f4f3ed;color:#19332f}
 #monForm fieldset{border:1px solid #95a89e;border-radius:8px;padding:12px;margin-bottom:16px;background:#fff}
 #monForm legend{font-weight:bold;color:#164c43;padding:0 6px}
