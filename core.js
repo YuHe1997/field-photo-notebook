@@ -40,15 +40,34 @@ export function monitoringInsertionIndex(records,day){
 export function workDayOf(p){return validDay(p.workDay)?p.workDay:localDay(p.buttonPressedAt??p.capturedAt??p.importedAt??p.createdAt??Date.now());}
 export function numberedPhoto(p){return `照片 ${String(p.photoNumber??'?').padStart(2,'0')}`;}
 export function numberedGroup(ids,photos){return '照片 '+ids.map(id=>String(photos.find(p=>p.id===id)?.photoNumber??'?').padStart(2,'0')).join('、');}
-export function cameraAutoRotation({width,height,screenAngle=null,beta=null,gamma=null}={}){
- if(Number.isFinite(beta)&&Number.isFinite(gamma)){
+// Which edge of the phone points at the sky (0 top, 90 right, 180 bottom, 270 left), from the gravity direction.
+// `previous` adds hysteresis, so holding the phone near 45 degrees does not make the picture flicker.
+export function skyEdgeFromTilt({beta,gamma,previous=null}={}){
+ if(!Number.isFinite(beta)||!Number.isFinite(gamma))return previous;
+ const b=beta*Math.PI/180,g=gamma*Math.PI/180,ux=-Math.cos(b)*Math.sin(g),uy=Math.sin(b);
+ if(Math.hypot(ux,uy)<0.25)return previous;
+ const raw=Math.abs(ux)>Math.abs(uy)?(ux>0?90:270):(uy>=0?0:180);
+ if(![0,90,180,270].includes(previous)||raw===previous)return raw;
+ const horizontal=raw===90||raw===270,wasHorizontal=previous===90||previous===270;
+ if(horizontal===wasHorizontal)return raw;
+ return (horizontal?Math.abs(ux)>=Math.abs(uy)*1.3:Math.abs(uy)>=Math.abs(ux)*1.3)?raw:previous;
+}
+// While the screen itself stays portrait (system rotation lock, or a browser that cannot rotate), the camera screen is
+// turned by this many degrees clockwise so that it still stands upright for the person holding the phone sideways.
+export function cameraFrameTurn({skyEdge,windowPortrait=true}={}){
+ if(!windowPortrait||![90,270].includes(skyEdge))return 0;
+ return (360-skyEdge)%360;
+}
+export function cameraAutoRotation({width,height,screenAngle=null,beta=null,gamma=null,skyEdge:forced=null}={}){
+ let skyEdge=[0,90,180,270].includes(forced)?forced:null;
+ if(skyEdge===null&&Number.isFinite(beta)&&Number.isFinite(gamma)){
   const b=beta*Math.PI/180,g=gamma*Math.PI/180,ux=-Math.cos(b)*Math.sin(g),uy=Math.sin(b);
-  if(Math.hypot(ux,uy)>=0.25){
-   const skyEdge=Math.abs(ux)>Math.abs(uy)?(ux>0?90:270):(uy>=0?0:180);
-   if(height>width)return (360-skyEdge)%360;
-   const topEdge=screenAngle===270||screenAngle===-90?270:screenAngle===90?90:(skyEdge===90||skyEdge===270?90:0);
-   return (topEdge-skyEdge+360)%360;
-  }
+  if(Math.hypot(ux,uy)>=0.25)skyEdge=Math.abs(ux)>Math.abs(uy)?(ux>0?90:270):(uy>=0?0:180);
+ }
+ if(skyEdge!==null){
+  if(height>width)return (360-skyEdge)%360;
+  const topEdge=screenAngle===270||screenAngle===-90?270:screenAngle===90?90:(skyEdge===90||skyEdge===270?90:0);
+  return (topEdge-skyEdge+360)%360;
  }
  if(height<=width)return 0;
  return screenAngle===270||screenAngle===-90?90:270;

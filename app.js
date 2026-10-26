@@ -18,7 +18,7 @@ import {
   insertTextAtCaret,
   handleWorkScopeKeyDown
 } from './mon-numbering.js';
-import {validCrop,normalizeCrop,rotateCrop,cropSummary,compactCoordinates,compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,cameraAutoRotation,previewRotation,zoomCapability,snapZoom,cropRect,focusCapabilities,mapPreviewTapToSensor,deriveCameraBearing} from './core.js';
+import {validCrop,normalizeCrop,rotateCrop,cropSummary,compactCoordinates,compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,cameraAutoRotation,cameraFrameTurn,skyEdgeFromTilt,previewRotation,zoomCapability,snapZoom,cropRect,focusCapabilities,mapPreviewTapToSensor,deriveCameraBearing} from './core.js';
 import {WorkPhrasePicker,readPhraseMetadata,photoEngineeringPhrases,readSavedScopePhrases,phraseInsertion} from './work-phrases.js';
 import {renderPhotoCanvas} from './photo-render.js';
 import {openCropDialog} from './crop-ui.js';
@@ -137,7 +137,7 @@ function stop(){
   if($('focusStatus'))$('focusStatus').textContent='';
   if($('cameraOverlayStatus'))$('cameraOverlayStatus').textContent='';
   if($('cameraOverlay'))$('cameraOverlay').hidden=true;
-  leaveCameraFullscreen();lastLayoutKey='';previewRot=0;
+  leaveCameraFullscreen();lastLayoutKey='';frameKey='';previewRot=0;skyEdge=null;
   document.body.classList.remove('camera-overlay-active');
   directionStatus=gpsStatus='已停止';
   window.removeEventListener('deviceorientation',onOrientation);
@@ -202,23 +202,34 @@ $('cameraInfo').onclick=()=>setCameraDetails($('cameraDetails').hidden);
 $('cameraDetailsClose').onclick=()=>{setCameraDetails(false);$('cameraInfo').focus({preventScroll:true});};
 // The picture the user sees must match the saved photo: turn the preview by the same gravity-based rotation that the
 // capture applies, and keep re-measuring so a rotation of the phone (or the browser bars) can never leave it stretched.
-let previewRot=0,lastLayoutKey='';
+let previewRot=0,lastLayoutKey='',frameKey='',skyEdge=null;
+// Which phone edge points at the sky; null while there is no fresh sensor reading.
+function currentSky(){return deviceTilt&&Date.now()-deviceTilt.readingAt<=2000&&skyEdge!==null?skyEdge:null;}
 function desiredPreviewRotation(){
   const v=$('video');if(!v?.videoWidth||!v.videoHeight)return 0;
   const tilt=deviceTilt&&Date.now()-deviceTilt.readingAt<=2000?deviceTilt:null;
-  if(!tilt)return 0;
-  const b=tilt.beta*Math.PI/180,g=tilt.gamma*Math.PI/180;
-  // Phone lying flat: gravity says nothing about "up", keep what we had instead of flipping.
-  if(Math.hypot(-Math.cos(b)*Math.sin(g),Math.sin(b))<0.25)return previewRot;
-  return cameraAutoRotation({width:v.videoWidth,height:v.videoHeight,screenAngle:tilt.screenAngle??screen.orientation?.angle??window.orientation??null,beta:tilt.beta,gamma:tilt.gamma});
+  if(!tilt||currentSky()===null)return tilt?previewRot:0;
+  return cameraAutoRotation({width:v.videoWidth,height:v.videoHeight,screenAngle:tilt.screenAngle??screen.orientation?.angle??window.orientation??null,skyEdge:currentSky()});
+}
+// The whole camera screen stays upright for the person holding the phone. A browser/OS that rotates the screen already
+// does this by itself; when the screen stays portrait (rotation lock, iPhone web apps) the screen is turned here.
+function updateCameraFrame(){
+  const overlay=$('cameraOverlay'),frame=$('cameraFrame');if(!overlay||!frame||overlay.hidden)return;
+  const W=overlay.clientWidth,H=overlay.clientHeight;if(!W||!H)return;
+  const turn=cameraFrameTurn({skyEdge:currentSky(),windowPortrait:H>=W}),fw=turn?H:W,fh=turn?W:H,wide=fw>fh&&fh<=520;
+  const key=[W,H,turn,wide].join('x');if(key===frameKey)return;frameKey=key;
+  frame.classList.toggle('is-turned',turn!==0);frame.dataset.turn=String(turn);frame.dataset.wide=String(wide);
+  frame.style.setProperty('--fw',fw+'px');frame.style.setProperty('--fh',fh+'px');frame.style.setProperty('--fr',turn+'deg');
 }
 function previewDimensions(){
+  updateCameraFrame();
   const v=$('video'),preview=$('cameraPreview'),vp=$('cameraViewport'),rotor=$('cameraRotor');
   if(!v||!preview||!vp)return;
   const vw=v.videoWidth,vh=v.videoHeight;
   if(!vw||!vh)return;
   const rot=desiredPreviewRotation(),turned=rot%180!==0,aspect=turned?vh/vw:vw/vh;
-  const stage=preview.getBoundingClientRect();
+  // Layout size, not the on-screen box: the camera screen itself may be turned.
+  const stage={width:preview.offsetWidth,height:preview.offsetHeight};
   if(!stage.width||!stage.height)return;
   const key=[vw,vh,rot,Math.round(stage.width),Math.round(stage.height)].join('x');
   if(key===lastLayoutKey)return;
@@ -339,6 +350,7 @@ $('start').onclick=()=>run(async()=>{
     // Synchronously open overlay and isolate background during user click gesture before any await!
     if($('cameraOverlay')){$('cameraOverlay').hidden=false;setCameraDetails(false);}
     document.body.classList.add('camera-overlay-active');
+    frameKey='';updateCameraFrame();
     isolateBackground(true);
     overlayErrorText=null;
     if($('cameraOverlayStatus'))$('cameraOverlayStatus').textContent='正在啟動相機…';
@@ -394,10 +406,13 @@ async function handlePreviewTap(e){
   const fs=focusState;if(!fs||!stream||busy||!currentCamera(fs.session))return;
   const viewport=$('cameraViewport'),video=$('video');if(!viewport||!video||!video.videoWidth)return;
   const vpRect=viewport.getBoundingClientRect(),reticle=$('focusReticle'),status=$('focusStatus');
-  const inVp=e.clientX>=vpRect.left&&e.clientX<=vpRect.right&&e.clientY>=vpRect.top&&e.clientY<=vpRect.bottom;
+  // The tap is on the screen; the picture lives in the (possibly turned) camera screen: bring the tap into that frame.
+  const turnNow=Number($('cameraFrame')?.dataset.turn)||0,theta=turnNow*Math.PI/180,dx=e.clientX-(vpRect.left+vpRect.width/2),dy=e.clientY-(vpRect.top+vpRect.height/2);
+  const vpW=viewport.offsetWidth,vpH=viewport.offsetHeight,tapX=vpW/2+dx*Math.cos(theta)+dy*Math.sin(theta),tapY=vpH/2-dx*Math.sin(theta)+dy*Math.cos(theta);
+  const inVp=tapX>=0&&tapX<=vpW&&tapY>=0&&tapY<=vpH;
   if(!inVp){if(status)status.textContent='點按位置在黑邊（letterbox）區域，請點按鏡頭影像區域';return;}
-  const tapX=e.clientX-vpRect.left,tapY=e.clientY-vpRect.top,z=zoomState;
-  const turned=previewRot%180!==0,mapping=mapPreviewTapToSensor(tapX,tapY,vpRect.width,vpRect.height,turned?video.videoHeight:video.videoWidth,turned?video.videoWidth:video.videoHeight,z?.mode,z?.factor);
+  const z=zoomState;
+  const turned=previewRot%180!==0,mapping=mapPreviewTapToSensor(tapX,tapY,vpW,vpH,turned?video.videoHeight:video.videoWidth,turned?video.videoWidth:video.videoHeight,z?.mode,z?.factor);
   if(!mapping.inBounds){if(status)status.textContent=mapping.reason;return;}
   {const raw=unrotatePoint(mapping.sensorX,mapping.sensorY,previewRot);mapping.sensorX=raw.x;mapping.sensorY=raw.y;}
   if(reticle){reticle.style.left=`${tapX}px`;reticle.style.top=`${tapY}px`;reticle.className='focus-reticle requesting';reticle.hidden=false;}
@@ -502,7 +517,8 @@ function onOrientation(e){
   }
   if(Number.isFinite(e.beta)&&Number.isFinite(e.gamma)){
     deviceTilt={beta:e.beta,gamma:e.gamma,readingAt:Date.now(),screenAngle:screen.orientation?.angle??window.orientation??null};
-    if(desiredPreviewRotation()!==previewRot)previewDimensions();
+    skyEdge=skyEdgeFromTilt({beta:e.beta,gamma:e.gamma,previous:skyEdge});
+    if(desiredPreviewRotation()!==previewRot||cameraFrameTurn({skyEdge:currentSky(),windowPortrait:$('cameraOverlay').clientHeight>=$('cameraOverlay').clientWidth})!==(Number($('cameraFrame')?.dataset.turn)||0))previewDimensions();
   }else if(!e.isTrusted){
     deviceTilt=null;
   }
@@ -610,7 +626,7 @@ $('shutter').onclick=()=>run(async()=>{
     if(session!==cameraSession||track.readyState==='ended')throw Error('相機已停止，請重新開啟後拍攝');
     const acquisitionStartedAt=Date.now();let blob,method,frameCopiedAt=null,outputWidth=null,outputHeight=null;
     const v=$('video'),tilt=buttonReading(deviceTilt,buttonPressedAt,10000)??direction;
-    const captureRotation=v?.videoWidth&&v?.videoHeight?cameraAutoRotation({width:v.videoWidth,height:v.videoHeight,screenAngle,beta:tilt?.beta,gamma:tilt?.gamma}):0;
+    const captureRotation=v?.videoWidth&&v?.videoHeight?cameraAutoRotation({width:v.videoWidth,height:v.videoHeight,screenAngle,beta:tilt?.beta,gamma:tilt?.gamma,skyEdge:currentSky()}):0;
     try{
       if(useZoomFrame||captureRotation!==0||!window.ImageCapture)throw Error();
       blob=await new ImageCapture(track).takePhoto();method='ImageCapture.takePhoto';
@@ -1463,7 +1479,7 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
-if($('masterBuild'))$('masterBuild').textContent=`App v39 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+if($('masterBuild'))$('masterBuild').textContent=`App v40 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
 $('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}
