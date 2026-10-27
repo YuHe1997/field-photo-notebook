@@ -18,7 +18,7 @@ import {
   insertTextAtCaret,
   handleWorkScopeKeyDown
 } from './mon-numbering.js';
-import {validCrop,normalizeCrop,rotateCrop,cropSummary,compactCoordinates,compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,cameraAutoRotation,cameraFrameTurn,skyEdgeFromTilt,previewRotation,zoomCapability,snapZoom,cropRect,focusCapabilities,mapPreviewTapToSensor,deriveCameraBearing} from './core.js';
+import {validCrop,normalizeCrop,rotateCrop,cropSummary,compactCoordinates,compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,cameraAutoRotation,cameraPreviewRotation,cameraFrameTurn,skyEdgeFromTilt,previewRotation,zoomCapability,snapZoom,cropRect,focusCapabilities,mapPreviewTapToSensor,deriveCameraBearing} from './core.js';
 import {WorkPhrasePicker,readPhraseMetadata,photoEngineeringPhrases,readSavedScopePhrases,phraseInsertion} from './work-phrases.js';
 import {renderPhotoCanvas} from './photo-render.js';
 import {openCropDialog} from './crop-ui.js';
@@ -159,6 +159,12 @@ async function closeCamera(){
     }
   }
 }
+// Shown in 資訊: lets a real-phone test tell which way the platform delivers the camera picture.
+function orientationDiagnostics(){
+  const v=$('video'),sky=currentSky(),edge={0:'上緣',90:'右緣',180:'下緣',270:'左緣'};
+  if(!v?.videoWidth||!v.videoHeight)return '相機影格未就緒';
+  return `影格 ${v.videoWidth}×${v.videoHeight}；視窗${windowPortrait()?'直向':'橫向'}；朝天：${sky===null?'未取得':edge[sky]}；存檔轉 ${uprightRotation()}°；預覽轉 ${previewRot}°；畫面轉 ${frameTurnNow()}°`;
+}
 function sensors(){
   const now=Date.now(),fresh=heading?now-heading.readingAt<=2000:false;
   let bearingText;
@@ -169,7 +175,7 @@ function sensors(){
   }else{
     bearingText=`無法可靠判定${heading?.cameraBearingEvidence?`（${heading.cameraBearingEvidence}）`:''}`;
   }
-  $('sensor').textContent=`${sensorState}；GPS 狀態：${gpsStatus}；方向狀態：${directionStatus}；GPS：${gps?`${gps.latitude.toFixed(6)}, ${gps.longitude.toFixed(6)} ±${gps.accuracyM}m；${now-gps.readingAt<=10000?'新鮮':'過期'}；${gps.accuracyM>20?'約略':'精度非保證'}`:'未取得'}；裝置羅盤：${heading?`裝置參考推估：${directionLabel(heading.degrees)}；${heading.degrees.toFixed(1)}°；${heading.quality}；${fresh?'新鮮':'過期'}（僅供參考）`:'未取得絕對方位'}；鏡頭朝向：${bearingText}`;
+  $('sensor').textContent=`${sensorState}；GPS 狀態：${gpsStatus}；方向狀態：${directionStatus}；GPS：${gps?`${gps.latitude.toFixed(6)}, ${gps.longitude.toFixed(6)} ±${gps.accuracyM}m；${now-gps.readingAt<=10000?'新鮮':'過期'}；${gps.accuracyM>20?'約略':'精度非保證'}`:'未取得'}；裝置羅盤：${heading?`裝置參考推估：${directionLabel(heading.degrees)}；${heading.degrees.toFixed(1)}°；${heading.quality}；${fresh?'新鮮':'過期'}（僅供參考）`:'未取得絕對方位'}；鏡頭朝向：${bearingText}；轉正診斷：${orientationDiagnostics()}`;
   if($('cameraOverlayStatus')){
     $('cameraOverlayStatus').classList.toggle('is-notice',Boolean(overlayErrorText));
     if(overlayErrorText){
@@ -207,17 +213,25 @@ let previewRot=0,lastLayoutKey='',frameKey='',skyEdge=null;
 function currentSky(){return deviceTilt&&Date.now()-deviceTilt.readingAt<=2000&&skyEdge!==null?skyEdge:null;}
 // Like a camera with buttons, the camera screen stays fixed to the phone. When the system rotates the screen along with the
 // phone (landscape window) the whole camera frame is turned back, so every control stays exactly where it was in portrait.
+function windowPortrait(){const overlay=$('cameraOverlay');return !overlay||overlay.clientHeight>=overlay.clientWidth;}
 function wantedFrameTurn(){
-  const overlay=$('cameraOverlay');if(!overlay)return 0;
-  return cameraFrameTurn({skyEdge:currentSky(),screenAngle:screen.orientation?.angle??window.orientation??null,windowPortrait:overlay.clientHeight>=overlay.clientWidth});
+  if(!$('cameraOverlay'))return 0;
+  return cameraFrameTurn({skyEdge:currentSky(),screenAngle:screen.orientation?.angle??window.orientation??null,windowPortrait:windowPortrait()});
 }
 const frameTurnNow=()=>Number($('cameraFrame')?.dataset.turn)||0;
-// The preview is the camera's own view, fixed to the phone (it does not follow how the phone is held; the saved photo
-// is turned upright). A system that rotates the picture with the screen is turned back inside the frame as well.
+// Degrees clockwise that turn the live picture upright (sky at the top); the shutter saves the photo with this turn.
+function uprightRotation(screenAngle=screen.orientation?.angle??window.orientation??null,tilt=null){
+  const v=$('video');if(!v?.videoWidth||!v.videoHeight)return 0;
+  return cameraAutoRotation({width:v.videoWidth,height:v.videoHeight,screenAngle,beta:tilt?.beta,gamma:tilt?.gamma,skyEdge:currentSky(),windowPortrait:windowPortrait()});
+}
+// The camera screen is fixed to the phone, but the picture inside it is what the lens sees, the right way up in the world,
+// exactly like the saved photo. iPhone already levels the camera picture by itself (it turns wide when the phone is held
+// sideways, even with portrait lock); this works out the turn either way from the saved-photo rotation and the sky edge.
 function desiredPreviewRotation(){
   const v=$('video');if(!v?.videoWidth||!v.videoHeight)return 0;
-  const turn=frameTurnNow();
-  return v.videoWidth>v.videoHeight&&turn?(360-turn)%360:0;
+  const sky=currentSky();
+  if(sky===null){const turn=frameTurnNow();return v.videoWidth>v.videoHeight&&turn?(360-turn)%360:0;}
+  return cameraPreviewRotation({captureRotation:uprightRotation(),skyEdge:sky});
 }
 function updateCameraFrame(){
   const overlay=$('cameraOverlay'),frame=$('cameraFrame');if(!overlay||!frame||overlay.hidden)return;
@@ -524,7 +538,7 @@ function onOrientation(e){
   if(Number.isFinite(e.beta)&&Number.isFinite(e.gamma)){
     deviceTilt={beta:e.beta,gamma:e.gamma,readingAt:Date.now(),screenAngle:screen.orientation?.angle??window.orientation??null};
     skyEdge=skyEdgeFromTilt({beta:e.beta,gamma:e.gamma,previous:skyEdge});
-    if(wantedFrameTurn()!==frameTurnNow())previewDimensions();
+    if(wantedFrameTurn()!==frameTurnNow()||desiredPreviewRotation()!==previewRot)previewDimensions();
   }else if(!e.isTrusted){
     deviceTilt=null;
   }
@@ -632,7 +646,7 @@ $('shutter').onclick=()=>run(async()=>{
     if(session!==cameraSession||track.readyState==='ended')throw Error('相機已停止，請重新開啟後拍攝');
     const acquisitionStartedAt=Date.now();let blob,method,frameCopiedAt=null,outputWidth=null,outputHeight=null;
     const v=$('video'),tilt=buttonReading(deviceTilt,buttonPressedAt,10000)??direction;
-    const captureRotation=v?.videoWidth&&v?.videoHeight?cameraAutoRotation({width:v.videoWidth,height:v.videoHeight,screenAngle,beta:tilt?.beta,gamma:tilt?.gamma,skyEdge:currentSky()}):0;
+    const captureRotation=uprightRotation(screenAngle,tilt);
     try{
       if(useZoomFrame||captureRotation!==0||!window.ImageCapture)throw Error();
       blob=await new ImageCapture(track).takePhoto();method='ImageCapture.takePhoto';
@@ -1485,7 +1499,7 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
-if($('masterBuild'))$('masterBuild').textContent=`App v41 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+if($('masterBuild'))$('masterBuild').textContent=`App v42 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
 $('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}

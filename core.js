@@ -61,12 +61,17 @@ export function cameraFrameTurn({skyEdge=null,screenAngle=null,windowPortrait=tr
  const top=screenAngle===270||screenAngle===-90?270:screenAngle===90?90:null;
  return top===null?0:(360-top)%360;
 }
-export function cameraAutoRotation({width,height,screenAngle=null,beta=null,gamma=null,skyEdge:forced=null}={}){
+// Degrees clockwise to turn the live camera picture so that the sky is at the top of the saved photo.
+// `windowPortrait` (true/false, from the live camera screen) enables the rule for pictures the platform already levels:
+// iPhone (WebKit) turns the camera picture itself to follow gravity, even with portrait lock, so a wide picture while the
+// phone is held sideways is already upright. Without `windowPortrait` (stored photos) the older rules apply unchanged.
+export function cameraAutoRotation({width,height,screenAngle=null,beta=null,gamma=null,skyEdge:forced=null,windowPortrait=null}={}){
  let skyEdge=[0,90,180,270].includes(forced)?forced:null;
  if(skyEdge===null&&Number.isFinite(beta)&&Number.isFinite(gamma)){
   const b=beta*Math.PI/180,g=gamma*Math.PI/180,ux=-Math.cos(b)*Math.sin(g),uy=Math.sin(b);
   if(Math.hypot(ux,uy)>=0.25)skyEdge=Math.abs(ux)>Math.abs(uy)?(ux>0?90:270):(uy>=0?0:180);
  }
+ if(skyEdge!==null&&typeof windowPortrait==='boolean'&&width>height&&(skyEdge===90||skyEdge===270))return 0;
  if(skyEdge!==null){
   if(height>width)return (360-skyEdge)%360;
   const topEdge=screenAngle===270||screenAngle===-90?270:screenAngle===90?90:(skyEdge===90||skyEdge===270?90:0);
@@ -75,6 +80,9 @@ export function cameraAutoRotation({width,height,screenAngle=null,beta=null,gamm
  if(height<=width)return 0;
  return screenAngle===270||screenAngle===-90?90:270;
 }
+// The live preview inside the camera screen (which is fixed to the phone) is turned so that it shows the same upright
+// picture as the saved photo, seen through the phone: saved-photo rotation plus the sky edge.
+export function cameraPreviewRotation({captureRotation,skyEdge}){return ((captureRotation+skyEdge)%360+360)%360;}
 export function previewRotation(p,width,height){
  if([0,90,180,270].includes(p?.displayRotation))return p.displayRotation;
  const tilt=p?.deviceTilt??p?.heading;
