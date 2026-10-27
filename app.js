@@ -647,10 +647,9 @@ $('shutter').onclick=()=>run(async()=>{
     const acquisitionStartedAt=Date.now();let blob,method,frameCopiedAt=null,outputWidth=null,outputHeight=null;
     const v=$('video'),tilt=buttonReading(deviceTilt,buttonPressedAt,10000)??direction;
     const captureRotation=uprightRotation(screenAngle,tilt);
-    try{
-      if(useZoomFrame||captureRotation!==0||!window.ImageCapture)throw Error();
-      blob=await new ImageCapture(track).takePhoto();method='ImageCapture.takePhoto';
-    }catch(e){
+    // Always save the live picture itself (what the viewfinder shows). ImageCapture.takePhoto is not used: on iPhone it
+    // returns a picture fixed to the phone, so a photo taken with the phone sideways came out turned with the phone.
+    {
       if(session!==cameraSession||track.readyState==='ended')throw Error('相機已停止，未擷取影像');
       if(!v.videoWidth)throw Error('相機影格尚未就緒');
       const crop=cropRect(v.videoWidth,v.videoHeight,zoom.mode==='browser-digital-crop'?zoom.factor:1),swapped=captureRotation%180!==0,c=document.createElement('canvas');c.width=swapped?crop.height:crop.width;c.height=swapped?crop.width:crop.height;
@@ -1499,7 +1498,7 @@ $('uploadDrive').onclick=async()=>{
 };
 // Master append is explicit, copy-first, and uses the SAME GIS client as other App exports.
 let checkedMaster=null;
-if($('masterBuild'))$('masterBuild').textContent=`App v42 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
+if($('masterBuild'))$('masterBuild').textContent=`App v43 / 追加核心：${docsAppendInfo.DOCS_APPEND_BUILD||'舊版，請使用下方更新連結'}`;
 $('masterUpdate')?.addEventListener('click',event=>{if(monitoringWorking||uploadingPhotos){event.preventDefault();$('masterStatus').textContent='請先等待目前輸出完成，再更新程式。';}});
 const MASTER_TARGET_KEY='field-monitoring-master-target',MASTER_JOURNAL_KEY='field-monitoring-master-journal-v1';
 try{$('masterDocUrl').value=safeGetLocalStorage()?.getItem(MASTER_TARGET_KEY)||'';}catch{}
