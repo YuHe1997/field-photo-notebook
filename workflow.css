@@ -775,3 +775,7 @@ body.keyboard-open header nav { display: none; }
 #masterSetupDialog #monitoringAuth .actions > button { flex: 1 1 160px; }
 #masterSetupDialog input, #masterSetupDialog select { width: 100%; }
 #masterSetupDialog p, #masterSelectionStatus { overflow-wrap: anywhere; }
+
+/* v45: repair button for photos the browser cannot show (full row under the import tools) */
+.photos-top-tools { flex-wrap: wrap; }
+.photos-top-tools > #repairPhotos { flex-basis: 100%; }

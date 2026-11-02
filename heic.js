@@ -19,11 +19,22 @@ export function heifBrand(bytes){
 }
 export async function isHeif(file){
   if(HEIF_TYPES.has((file.type||'').toLowerCase())||/\.(heic|heif|hif)$/i.test(file.name||''))return true;
-  // Some Android pickers report an empty or generic type; look at the file itself.
-  if((file.type||'').startsWith('image/'))return false;
+  // Always look at the bytes: some Android pickers label HEIC as image/jpeg, .jpg or an empty type.
   return heifBrand(new Uint8Array(await file.slice(0,64).arrayBuffer()));
 }
-export function jpegName(name){return String(name||'photo').replace(/\.(heic|heif|hif)$/i,'')+'.jpg';}
+// Short, value-free description of a file's real format, for error messages (e.g. "ftyp heic", "JPEG").
+export async function describeFormat(file){
+  const b=new Uint8Array(await file.slice(0,32).arrayBuffer()),s=(i,n)=>String.fromCharCode(...b.slice(i,i+n));
+  if(b[0]===0xff&&b[1]===0xd8)return 'JPEG';if(s(1,3)==='PNG')return 'PNG';if(s(0,4)==='RIFF'&&s(8,4)==='WEBP')return 'WebP';
+  if(s(4,4)==='ftyp')return 'ftyp '+s(8,4).replace(/[^\x20-\x7e]/g,'?');if(s(0,2)==='II'||s(0,2)==='MM')return 'TIFF/RAW';
+  return b.length?'未知格式':'空檔案';
+}
+// True when this browser itself can decode the image.
+export async function canDecode(blob){
+  const url=URL.createObjectURL(blob);
+  try{const im=new Image();im.src=url;await im.decode();return im.naturalWidth>0;}catch{return false;}finally{URL.revokeObjectURL(url);}
+}
+export function jpegName(name){return String(name||'photo').replace(/\.(heic|heif|hif|jpe?g)$/i,'')+'.jpg';}
 
 function canvasToJpeg(canvas){
   return new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('無法轉存為 JPEG（照片可能過大）')),'image/jpeg',.92));
