@@ -23,6 +23,7 @@ import {WorkPhrasePicker,readPhraseMetadata,photoEngineeringPhrases,readSavedSco
 import {renderPhotoCanvas} from './photo-render.js';
 import {openCropDialog} from './crop-ui.js';
 import {isHeif,heifToJpeg,jpegName,canDecode,describeFormat} from './heic.js';
+import {importFiles} from './photo-import.js';
 import {AREA_DATA} from './area-data.js';
 import {createAreaMatcher,areaReferenceText} from './area-reference.js';
 let areaMatcher;try{areaMatcher=createAreaMatcher(AREA_DATA);}catch{areaMatcher=()=>({status:'unavailable',reason:'dataset-invalid',candidates:[],datasetVersion:AREA_DATA?.version});}
@@ -698,17 +699,24 @@ $('shutter').onclick=()=>run(async()=>{
     await commitPending();
   }finally{busy=false;zoomUI();}
 });
-$('import').onchange=()=>run(async()=>{const workDay=activeDay,files=[...$('import').files],converted=[],failed=[];
-  for(const [i,file] of files.entries()){
-    const base={id:crypto.randomUUID(),source:'gallery',capturedAt:null,importedAt:Date.now(),fileLastModifiedAt:file.lastModified,location:null,heading:null,sourceExif:null,workDay};
-    const heif=await isHeif(file);
-    // Only store what this browser can show; anything else is converted (HEIC/HEIF) or refused with its real format.
-    if(!heif&&file.type.startsWith('image/')&&await canDecode(file)){pending.push({blob:file,photo:{...base,originalName:file.name,mime:file.type,captureMethod:'原始檔案匯入；未解析 EXIF，預覽由瀏覽器解碼方向',...(file.type!=='image/png'?{displayRotation:0}:{})}});continue;}
-    say(`正在轉換照片為 JPEG（${i+1}／${files.length}）…`);
-    try{const {blob,decoder}=await heifToJpeg(file);converted.push(file);pending.push({blob,photo:{...base,originalName:jpegName(file.name),mime:'image/jpeg',convertedFrom:{name:file.name,mime:file.type||'image/heif',size:file.size,decoder},captureMethod:`HEIC／HEIF 匯入，已轉為 JPEG（${decoder}）；未保留 EXIF，影像已依檔案方向轉正`,displayRotation:0}});}
-    catch(e){failed.push(`${file.name}（${file.type||'未標類型'}，${await describeFormat(file)}${heif?'；'+e.message:''}）`);}
-  }
-  if(pending.length)await commitPending();$('import').value='';if(failed.length)say(`已匯入 ${files.length-failed.length} 張；${failed.length} 張無法解碼，未加入：${failed.join('、')}`);else if(converted.length)say(`已儲存於本機（未上傳）；${converted.length} 張 HEIC 已轉為 JPEG`);});
+$('import').onchange=()=>run(async()=>{
+  if(pending.length)throw Error('請先點「重試未完成照片儲存」，再選取照片。');
+  const workDay=activeDay,files=[...$('import').files];
+  if(!files.length)return;
+  try{
+    const result=await importFiles(files,{workDay,isHeif,canDecode,heifToJpeg,describeFormat,jpegName,
+      newId:()=>crypto.randomUUID(),now:()=>Date.now(),progress:say,
+      save:async item=>{
+        pending.push(item);
+        updateRetryUI();
+        await db.savePhoto(item.photo,item.blob);
+        pending.shift();
+        updateRetryUI();
+      }});
+    await load();
+    say(result.message);
+  }finally{$('import').value='';updateRetryUI();}
+});
 // Photos stored before v44 (or mislabeled HEIC) cannot be shown; offer to convert them in place.
 $('repairPhotos').onclick=()=>run(async()=>{const bad=[];for(const p of photos){const a=assets.find(a=>a.id===p.id);if(a&&!await canDecode(a.original))bad.push([p,a.original]);}
   if(!bad.length){$('repairPhotos').hidden=true;say('所有照片都能正常顯示');return;}

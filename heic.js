@@ -31,8 +31,8 @@ export async function describeFormat(file){
 }
 // True when this browser itself can decode the image.
 export async function canDecode(blob){
-  const url=URL.createObjectURL(blob);
-  try{const im=new Image();im.src=url;await im.decode();return im.naturalWidth>0;}catch{return false;}finally{URL.revokeObjectURL(url);}
+  const url=URL.createObjectURL(blob),im=new Image();
+  try{im.src=url;await im.decode();return im.naturalWidth>0;}catch{return false;}finally{im.src='';URL.revokeObjectURL(url);}
 }
 export function jpegName(name){return String(name||'photo').replace(/\.(heic|heif|hif|jpe?g)$/i,'')+'.jpg';}
 
