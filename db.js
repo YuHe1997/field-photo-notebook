@@ -1,39 +1,40 @@
 import {workDayOf,validDay,validateGroup,validCrop,normalizeCrop,rotateCrop} from './core.js';
 import {compareGroups} from './ordering.js';
+import {PROJECTS,DEFAULT_PROJECT,projectOf,readCounters,mergeProjectCounters,countersForRecords} from './projects.js';
 let connection;
 export async function open(){if(connection)return connection;connection=await new Promise((resolve,reject)=>{const r=indexedDB.open('field-photo-notebook-v1',1);r.onupgradeneeded=()=>{for(const n of ['photos','assets','groups'])r.result.createObjectStore(n,{keyPath:'id'});};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.onblocked=()=>reject(Error('請關閉其他使用本工具的分頁'));});return connection;}
 export async function transaction(stores,action){const db=await open();return new Promise((resolve,reject)=>{const tx=db.transaction(stores,'readwrite');tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.failure||tx.error||Error('交易已中止'));try{action(tx);}catch(e){tx.abort();reject(e);}});}
 function checked(tx,fn){return ()=>{try{fn();}catch(e){tx.failure=e;tx.abort();}};}
 export async function all(store){const db=await open();return new Promise((resolve,reject)=>{const tx=db.transaction(store),r=tx.objectStore(store).getAll();let result;r.onsuccess=()=>result=r.result;tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error||Error('讀取交易已中止'));});}
-const COUNTERS='field-photo-notebook-number-counters';
-export function numberCounters(){try{const data=JSON.parse(localStorage.getItem(COUNTERS)||'{}');return Object.fromEntries(Object.entries(data).filter(([day,n])=>validDay(day)&&Number.isSafeInteger(n)&&n>0));}catch{return {};}}
-export function mergeCounters(incoming){const out=numberCounters();for(const [day,n] of Object.entries(incoming??{}))if(validDay(day)&&Number.isSafeInteger(n)&&n>0)out[day]=Math.max(out[day]||0,n);localStorage.setItem(COUNTERS,JSON.stringify(out));return out;}
-function countersFor(records){const counters=numberCounters();for(const p of records)if(Number.isSafeInteger(p.photoNumber)&&p.photoNumber>0){const day=workDayOf(p);counters[day]=Math.max(counters[day]||0,p.photoNumber);}return counters;}
+export const numberCounters=(projectId=DEFAULT_PROJECT)=>readCounters(localStorage,projectId);
+export const mergeCounters=(incoming,projectId=DEFAULT_PROJECT)=>mergeProjectCounters(localStorage,incoming,projectId);
+const countersFor=(records,projectId=DEFAULT_PROJECT)=>countersForRecords(localStorage,records,projectId);
 // Additive metadata only: no DB version change, original Blob/title/notes edits or renumbering.
-export const ensurePhotoIdentities=()=>transaction(['photos'],tx=>{const store=tx.objectStore('photos'),r=store.getAll();r.onsuccess=checked(tx,()=>{const records=r.result.sort((a,b)=>(a.buttonPressedAt??a.capturedAt??a.importedAt??0)-(b.buttonPressedAt??b.capturedAt??b.importedAt??0)||a.id.localeCompare(b.id)),counters=countersFor(records);for(const p of records){const workDay=workDayOf(p);let photoNumber=p.photoNumber;if(!Number.isSafeInteger(photoNumber)||photoNumber<1)photoNumber=counters[workDay]=(counters[workDay]||0)+1;if(p.workDay!==workDay||p.photoNumber!==photoNumber)store.put({...p,workDay,photoNumber});}mergeCounters(counters);});});
-export const savePhoto=(photo,blob)=>transaction(['photos','assets'],tx=>{const store=tx.objectStore('photos'),r=store.getAll();r.onsuccess=checked(tx,()=>{const counters=countersFor(r.result),workDay=workDayOf(photo),photoNumber=(counters[workDay]||0)+1;mergeCounters({...counters,[workDay]:photoNumber});store.add({...photo,workDay,photoNumber});tx.objectStore('assets').add({id:photo.id,original:blob});});});
+export const ensurePhotoIdentities=()=>transaction(['photos'],tx=>{const store=tx.objectStore('photos'),r=store.getAll();r.onsuccess=checked(tx,()=>{const records=r.result.sort((a,b)=>(a.buttonPressedAt??a.capturedAt??a.importedAt??0)-(b.buttonPressedAt??b.capturedAt??b.importedAt??0)||a.id.localeCompare(b.id)),counters=Object.fromEntries(PROJECTS.map(p=>[p.id,countersFor(records,p.id)]));for(const p of records){const workDay=workDayOf(p),counts=counters[projectOf(p)];let photoNumber=p.photoNumber;if(!Number.isSafeInteger(photoNumber)||photoNumber<1)photoNumber=counts[workDay]=(counts[workDay]||0)+1;if(p.workDay!==workDay||p.photoNumber!==photoNumber)store.put({...p,workDay,photoNumber});}for(const p of PROJECTS)mergeCounters(counters[p.id],p.id);});});
+export const savePhoto=(photo,blob)=>transaction(['photos','assets'],tx=>{const store=tx.objectStore('photos'),r=store.getAll();r.onsuccess=checked(tx,()=>{const projectId=projectOf(photo),counters=countersFor(r.result,projectId),workDay=workDayOf(photo),photoNumber=(counters[workDay]||0)+1;mergeCounters({...counters,[workDay]:photoNumber},projectId);store.add({...photo,projectId,workDay,photoNumber});tx.objectStore('assets').add({id:photo.id,original:blob});});});
 const groupInDay=(g,day,photos)=>g.workDay===day||g.photoIds.some(id=>photos.some(p=>p.id===id&&workDayOf(p)===day));
 // Content saves read the current rank in the same transaction. Legacy mixed-day
 // groups remain editable; no splitting, schema upgrade or original-byte writes.
 export const saveGroup=(g,{existing=false}={})=>transaction(['photos','groups'],tx=>{
  const p=tx.objectStore('photos').getAll(),store=tx.objectStore('groups'),r=store.getAll();
  r.onsuccess=checked(tx,()=>{
-  validateGroup(g,new Set(p.result.map(x=>x.id)));
+  g={...g,projectId:projectOf(g)};
+  validateGroup(g,new Set(p.result.filter(x=>projectOf(x)===g.projectId).map(x=>x.id)));
   const previous=r.result.find(x=>x.id===g.id);
   if(existing&&!previous)throw Error('紀錄集已被其他分頁移除；未重新建立');
   if(previous){const next={...previous,...g};delete next.sortOrder;if(Object.hasOwn(previous,'sortOrder'))next.sortOrder=previous.sortOrder;store.put(next);}
   else{
    const day=g.workDay??workDayOf(p.result.find(x=>x.id===g.photoIds[0]));
-   const ordered=r.result.filter(x=>groupInDay(x,day,p.result)).sort(compareGroups);
+   const ordered=r.result.filter(x=>projectOf(x)===g.projectId&&groupInDay(x,day,p.result)).sort(compareGroups);
    ordered.forEach((x,i)=>store.put({...x,sortOrder:i+1}));store.add({...g,sortOrder:ordered.length+1});
   }
  });
 });
-export const saveGroupOrder=(day,orderedIds)=>transaction(['photos','groups'],tx=>{
+export const saveGroupOrder=(day,orderedIds,projectId=DEFAULT_PROJECT)=>transaction(['photos','groups'],tx=>{
  if(!validDay(day)||!Array.isArray(orderedIds)||new Set(orderedIds).size!==orderedIds.length)throw Error('排序 ID 重複或日期無效');
  const p=tx.objectStore('photos').getAll(),store=tx.objectStore('groups'),r=store.getAll();
  r.onsuccess=checked(tx,()=>{
-  const current=r.result.filter(g=>groupInDay(g,day,p.result));
+  const current=r.result.filter(g=>projectOf(g)===projectId&&groupInDay(g,day,p.result));
   if(current.length!==orderedIds.length||orderedIds.some(id=>!current.some(g=>g.id===id)))throw Error('同日紀錄集已變更，請重新載入後排序');
   orderedIds.forEach((id,i)=>store.put({...current.find(g=>g.id===id),sortOrder:i+1}));
  });
