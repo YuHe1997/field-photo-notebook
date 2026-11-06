@@ -784,3 +784,18 @@ body.keyboard-open header nav { display: none; }
 /* v45: repair button for photos the browser cannot show (full row under the import tools) */
 .photos-top-tools { flex-wrap: wrap; }
 .photos-top-tools > #repairPhotos { flex-basis: 100%; }
+
+/* Shanhua's independent daily form; do not restyle Nanke controls. */
+.shanhua-form { max-width: 760px; margin-inline: auto; overflow-wrap: anywhere; }
+#shanhuaForm { display: grid; gap: 16px; }
+.shanhua-form label { display: grid; gap: 6px; min-width: 0; }
+.shanhua-form input:not([type="checkbox"]), .shanhua-form textarea,
+.shanhua-form select { width: 100%; min-width: 0; box-sizing: border-box; }
+#shanhuaForm label:has(input[type="checkbox"]) { display: flex; align-items: center; gap: 12px; min-height: 44px; }
+.shanhua-form input[type="checkbox"] { width: 22px; height: 22px; }
+.shanhua-image { margin-block: 16px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-s); }
+.shanhua-image img { display: block; max-width: 100%; max-height: 240px; object-fit: contain; margin-block: 12px; }
+.shanhua-image img[hidden], .shanhua-image button[hidden] { display: none; }
+#shanhuaStatus { white-space: pre-wrap; }
+#shanhuaDownload { background: var(--brand); color: var(--surface); }
+.shanhua-form .actions { margin-top: 16px; }
