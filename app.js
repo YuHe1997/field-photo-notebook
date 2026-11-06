@@ -22,7 +22,7 @@ import {
   insertTextAtCaret,
   handleWorkScopeKeyDown
 } from './mon-numbering.js';
-import {validCrop,normalizeCrop,rotateCrop,cropSummary,compactCoordinates,compactPhotoLines,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,cameraAutoRotation,cameraPreviewRotation,cameraFrameTurn,skyEdgeFromTilt,previewRotation,zoomCapability,snapZoom,cropRect,focusCapabilities,mapPreviewTapToSensor,deriveCameraBearing} from './core.js';
+import {validCrop,normalizeCrop,rotateCrop,cropSummary,compactCoordinates,compactPhotoLines,photoCameraBearing,directionLabel,readingAt,validateGroup,move,digest,tar,untar,localDay,validDay,workDayOf,numberedPhoto,numberedGroup,cameraAutoRotation,cameraPreviewRotation,cameraFrameTurn,skyEdgeFromTilt,previewRotation,zoomCapability,snapZoom,cropRect,focusCapabilities,mapPreviewTapToSensor,deriveCameraBearing} from './core.js';
 import {WorkPhrasePicker,readPhraseMetadata,photoEngineeringPhrases,readSavedScopePhrases,phraseInsertion} from './work-phrases.js';
 import {renderPhotoCanvas} from './photo-render.js';
 import {openCropDialog} from './crop-ui.js';
@@ -88,10 +88,11 @@ function photoInfo(p){
     details.className='camera-direction-details';
     details.append(text('summary','裝置羅盤參考'));
     if(p?.heading?.degrees!==undefined&&p?.heading?.degrees!==null){
-      details.append(text('span',`裝置羅盤參考：${directionLabel(p.heading.degrees)}（${p.heading.degrees.toFixed(1)}°） `));
+      details.append(text('span',`裝置羅盤原始讀值：${p.heading.degrees.toFixed(1)}° `));
     }
-    if(p?.cameraBearing!==undefined&&p?.cameraBearing!==null){
-      details.append(text('span',`鏡頭朝向估計：${directionLabel(p.cameraBearing)}（${p.cameraBearing.toFixed(1)}°，${p.cameraBearingEvidence||'推估'}）`));
+    const bearing=photoCameraBearing(p);
+    if(bearing.degrees!==null){
+      details.append(text('span',`鏡頭朝向估計：${bearing.label}（${bearing.degrees.toFixed(1)}°，${bearing.method==='recorded'?(p.cameraBearingEvidence||'推估'):bearing.method}；需驗證）`));
     }else if(p?.cameraBearing===null&&p?.cameraBearingEvidence){
       details.append(text('span',`鏡頭朝向：未確認（${p.cameraBearingEvidence}）`));
     }
@@ -175,15 +176,16 @@ function orientationDiagnostics(){
 }
 function sensors(){
   const now=Date.now(),fresh=heading?now-heading.readingAt<=2000:false;
+  const bearing=photoCameraBearing({heading,cameraBearing:heading?.cameraBearing});
   let bearingText;
   if(!fresh){
     bearingText='無法可靠判定（讀值已過期，無即時姿態）';
-  }else if(heading?.cameraBearing!==null&&heading?.cameraBearing!==undefined){
-    bearingText=`估計 ${directionLabel(heading.cameraBearing)}（${heading.cameraBearing.toFixed(1)}°，${heading.cameraBearingEvidence}）`;
+  }else if(bearing.degrees!==null){
+    bearingText=`估計 ${bearing.label}（${bearing.degrees.toFixed(1)}°，需驗證）`;
   }else{
     bearingText=`無法可靠判定${heading?.cameraBearingEvidence?`（${heading.cameraBearingEvidence}）`:''}`;
   }
-  $('sensor').textContent=`${sensorState}；GPS 狀態：${gpsStatus}；方向狀態：${directionStatus}；GPS：${gps?`${gps.latitude.toFixed(6)}, ${gps.longitude.toFixed(6)} ±${gps.accuracyM}m；${now-gps.readingAt<=10000?'新鮮':'過期'}；${gps.accuracyM>20?'約略':'精度非保證'}`:'未取得'}；裝置羅盤：${heading?`裝置參考推估：${directionLabel(heading.degrees)}；${heading.degrees.toFixed(1)}°；${heading.quality}；${fresh?'新鮮':'過期'}（僅供參考）`:'未取得絕對方位'}；鏡頭朝向：${bearingText}；轉正診斷：${orientationDiagnostics()}`;
+  $('sensor').textContent=`${sensorState}；GPS 狀態：${gpsStatus}；方向狀態：${directionStatus}；GPS：${gps?`${gps.latitude.toFixed(6)}, ${gps.longitude.toFixed(6)} ±${gps.accuracyM}m；${now-gps.readingAt<=10000?'新鮮':'過期'}；${gps.accuracyM>20?'約略':'精度非保證'}`:'未取得'}；裝置羅盤：${heading?`裝置參考推估：${bearing.label}；${bearing.degrees?.toFixed(1)}°；${heading.quality}；${fresh?'新鮮':'過期'}（僅供參考）`:'未取得絕對方位'}；鏡頭朝向：${bearingText}；轉正診斷：${orientationDiagnostics()}`;
   if($('cameraOverlayStatus')){
     $('cameraOverlayStatus').classList.toggle('is-notice',Boolean(overlayErrorText));
     if(overlayErrorText){
@@ -191,9 +193,9 @@ function sensors(){
     }else if(starting){
       $('cameraOverlayStatus').textContent='正在啟動相機…';
     }else if(!fresh){
-      $('cameraOverlayStatus').textContent=heading?`裝置：${directionLabel(heading.degrees)}（讀值過期）`:'等待方位';
-    }else if(heading?.cameraBearing!==null&&heading?.cameraBearing!==undefined){
-      $('cameraOverlayStatus').textContent=`鏡頭估計：${directionLabel(heading.cameraBearing)}（${heading.cameraBearing.toFixed(1)}°）`;
+      $('cameraOverlayStatus').textContent=heading?`方向：${bearing.label}（讀值過期，需驗證）`:'等待方位';
+    }else if(bearing.degrees!==null){
+      $('cameraOverlayStatus').textContent=`鏡頭估計：${bearing.label}（${bearing.degrees.toFixed(1)}°，需驗證）`;
     }else if(heading){
       $('cameraOverlayStatus').textContent='鏡頭方向未確認';
     }else{
@@ -580,6 +582,11 @@ function onOrientation(e){
   directionStatus='已取得裝置參考（需驗證）';
   const track=stream?.getVideoTracks()[0],facing=track?.getSettings().facingMode??'unknown';
   const derived=deriveCameraBearing({alpha:e.alpha,beta:e.beta,gamma:e.gamma,source,absolute:e.absolute===true,accuracy:Number.isFinite(e.webkitCompassAccuracy)?e.webkitCompassAccuracy:null,quality:Number.isFinite(e.webkitCompassAccuracy)&&e.webkitCompassAccuracy<0?'平台回報不可靠':'精度未保證／僅供參考',facingMode:facing,screenAngle:screen.orientation?.angle??window.orientation??null,readingAt:Date.now()});
+  if(source==='webkitCompassHeading'&&facing==='environment'){
+    const bearing=photoCameraBearing({heading:{degrees,source,beta:e.beta,gamma:e.gamma}});
+    const sky=skyEdgeFromTilt({beta:e.beta,gamma:e.gamma});
+    Object.assign(derived,{degrees:bearing.degrees,label:bearing.label,algorithm:bearing.method,evidence:`webkitCompassHeading＋朝天邊 ${sky??'未知'}°${sky===null?'（平放／姿態缺值，沿用羅盤）':''}；需驗證`});
+  }
   heading={degrees,source,readingAt:Date.now(),timestampMeaning:'瀏覽器收到讀值時間（非硬體時間）',accuracy:Number.isFinite(e.webkitCompassAccuracy)?e.webkitCompassAccuracy:null,quality:Number.isFinite(e.webkitCompassAccuracy)&&e.webkitCompassAccuracy<0?'平台回報不可靠':'精度未保證／僅供參考',northReference:'平台絕對參考；真北／磁北未保證',alpha:e.alpha,beta:e.beta,gamma:e.gamma,screenAngle:screen.orientation?.angle??window.orientation??null,cameraBearing:derived.degrees,cameraBearingLabel:derived.label,cameraBearingAlgorithm:derived.algorithm,cameraBearingEvidence:derived.degrees!==null?derived.evidence:derived.reason,cameraTransformEvidence:derived.degrees!==null?derived.evidence:derived.reason};
   sensors();
 }
@@ -732,7 +739,7 @@ $('repairPhotos').onclick=()=>run(async()=>{const bad=[];for(const p of photos){
   let fixed=0;const failed=[];for(const [i,[p,blob]] of bad.entries()){say(`正在修復照片（${i+1}／${bad.length}）…`);try{const {blob:jpeg,decoder}=await heifToJpeg(blob);await db.replaceOriginal(p.id,jpeg,{originalName:jpegName(p.originalName),mime:'image/jpeg',convertedFrom:{name:p.originalName,mime:p.mime,size:blob.size,decoder,repairedAt:Date.now()},displayRotation:0,captureMethod:`${p.captureMethod??''}；已修復：HEIC／HEIF 轉為 JPEG（${decoder}）`});for(const k of [...previewCache.keys()])if(k.startsWith(p.id+':'))previewCache.delete(k);fixed++;}catch(e){failed.push(`${photoLabel(p)}（${p.mime||'未標類型'}，${await describeFormat(blob)}）`);}}
   await load();$('repairPhotos').hidden=!failed.length;say(`已修復 ${fixed} 張照片`+(failed.length?`；${failed.length} 張仍無法解碼：${failed.join('、')}`:''));});
 function choose(id){if(multi){selected.has(id)?selected.delete(id):selected.add(id);}else selected=selected.has(id)?new Set():new Set([id]);render();}
-function render(){renderProjectUI();$('editingTab').hidden=true;$('appendToEditor').hidden=!edit;releaseImages('gallery');releaseImages('groups');$('gallery').replaceChildren();const days=[...new Set([...dayState.days,...photos.map(workDayOf),activeDay])].filter(validDay).sort();$('workDay').replaceChildren();for(const d of days){const o=text('option',`${d}（${photos.filter(p=>workDayOf(p)===d).length} 張）`);o.value=d;$('workDay').append(o);}$('workDay').value=activeDay;const assignedIds=new Set(groups.flatMap(g=>g.photoIds));$('currentDay').replaceChildren(...[activeDay,`拍攝 ${dayPhotos().filter(p=>p.source==='camera').length} 張`,`相簿 ${dayPhotos().filter(p=>p.source==='gallery').length} 張`,`待整理 ${dayPhotos().filter(p=>!assignedIds.has(p.id)).length} 張`,`紀錄集 ${groups.filter(groupInDay).length} 組`].map(label=>text('span',label)));for(const id of selected)if(!dayPhotos().some(p=>p.id===id))selected.delete(id);const assigned=new Set(groups.flatMap(g=>g.photoIds));for(const p of dayPhotos().filter(p=>!assigned.has(p.id)||selected.has(p.id))){const card=text('div','');card.className='card';const b=text('button',`${selected.has(p.id)?'已選 · ':''}${photoLabel(p)} · ${p.source==='camera'?'拍攝':'相簿'}${validCrop(p.crop)?' · 已裁切':''}`);b.setAttribute('aria-pressed',selected.has(p.id));b.prepend(photoImage(p.id,'gallery'));let timer,long=false;b.onpointerdown=e=>{if(e.button!==0)return;long=false;timer=setTimeout(()=>{long=true;multi=true;selected.add(p.id);render();},550);};b.onpointerup=b.onpointerleave=b.onpointercancel=()=>clearTimeout(timer);b.onclick=()=>{if(long){long=false;return;}choose(p.id);};const coordinates=text('p',compactCoordinates(p.location));coordinates.className='gallery-coordinates';card.append(b,photoAreaInfo(p,{collapsed:true}),coordinates);$('gallery').append(card);}$('multi').textContent=multi?'結束多選':'選取多張';$('multi').setAttribute('aria-pressed',multi);$('selectionCount').textContent=`已選 ${selected.size} 張；本日待整理 ${dayPhotos().filter(p=>!assigned.has(p.id)).length} 張`;$('appendToEditor').disabled=$('deleteSelected').disabled=$('rotateLeft').disabled=$('rotateRight').disabled=$('compose').disabled=!selected.size;$('cropSelected').disabled=selected.size!==1;$('returnToEditor').hidden=!edit;$('compose').hidden=!!edit;$('groupList').replaceChildren();if(!groups.some(groupInDay))$('groupList').append(text('p','本工作日尚無紀錄集。請到待整理照片選取照片並記事。'));const ordered=groups.filter(groupInDay).sort(compareGroups);$('toggleGroupOrder').disabled=ordered.length<2;$('groupOrderHint').textContent=ordered.length<2?'至少需要 2 組才能調整順序':'即時儲存 · 所有參考與匯出沿用此順序';for(const [index,g] of ordered.entries()){const a=text('article','');a.dataset.groupId=g.id;const orderTools=text('div','');orderTools.className='group-order-controls';orderTools.hidden=!groupOrdering;for(const [label,delta] of [['↑ 上移',-1],['↓ 下移',1]]){const b=text('button',label);b.dataset.direction=String(delta);b.disabled=index+delta<0||index+delta>=ordered.length;b.setAttribute('aria-label',`${groupTitle(g.photoIds)} ${label}`);b.onclick=()=>run(async()=>{await db.saveGroupOrder(activeDay,move(ordered.map(x=>x.id),index,delta),currentProject);await load();say('紀錄集順序已儲存');});orderTools.append(b);}a.append(orderTools,text('h3',`${index+1}. ${groupTitle(g.photoIds)}`),text('p',`${g.photoIds.length} 張 · 更新 ${new Date(g.updatedAt).toLocaleString()}`));const strip=text('div','');strip.className='group-photos';g.photoIds.forEach((id,i)=>{const p=photos.find(p=>p.id===id),figure=text('figure','');figure.append(photoImage(id,'groups'),text('figcaption',compactPhotoLines(p,i)[0]));strip.append(figure);});a.append(strip);const info=text('details','');info.append(text('summary',projectInfo(currentProject).areaReference?'照片資訊與區域判讀':'照片資訊'));g.photoIds.forEach((id,i)=>{const row=text('div','');row.append(text('strong',compactPhotoLines(photos.find(p=>p.id===id),i)[0]),photoInfo(photos.find(p=>p.id===id)));info.append(row);});a.append(info);for(const [label,value] of [['工程描述',g.engineering]]){const note=text('p',`${label}：${value||'未填寫'}`);note.className='note-text';a.append(note);}const e=text('button','編輯／排序照片');e.onclick=()=>openEditor(g);const d=text('button','移除紀錄集（保留原始照片）');d.className='danger';d.onclick=()=>run(async()=>{if(edit?.id===g.id){say('請先關閉或儲存此紀錄集的編輯，再移除。');return;}if(confirm('只移除此紀錄集，原始照片仍保留？')){await db.removeGroup(g.id);await load();say('已移除紀錄集，照片仍保留');}});a.append(e,d);$('groupList').append(a);}if(edit&&active==='editor')renderOrder();}
+function render(){renderProjectUI();$('editingTab').hidden=true;$('appendToEditor').hidden=!edit;releaseImages('gallery');releaseImages('groups');$('gallery').replaceChildren();const days=[...new Set([...dayState.days,...photos.map(workDayOf),activeDay])].filter(validDay).sort();$('workDay').replaceChildren();for(const d of days){const o=text('option',`${d}（${photos.filter(p=>workDayOf(p)===d).length} 張）`);o.value=d;$('workDay').append(o);}$('workDay').value=activeDay;const assignedIds=new Set(groups.flatMap(g=>g.photoIds));$('currentDay').replaceChildren(...[activeDay,`拍攝 ${dayPhotos().filter(p=>p.source==='camera').length} 張`,`相簿 ${dayPhotos().filter(p=>p.source==='gallery').length} 張`,`待整理 ${dayPhotos().filter(p=>!assignedIds.has(p.id)).length} 張`,`紀錄集 ${groups.filter(groupInDay).length} 組`].map(label=>text('span',label)));for(const id of selected)if(!dayPhotos().some(p=>p.id===id))selected.delete(id);const assigned=new Set(groups.flatMap(g=>g.photoIds));for(const p of dayPhotos().filter(p=>!assigned.has(p.id)||selected.has(p.id))){const card=text('div','');card.className='card';const b=text('button',`${selected.has(p.id)?'已選 · ':''}${photoLabel(p)} · ${p.source==='camera'?'拍攝':'相簿'}${validCrop(p.crop)?' · 已裁切':''}`);b.setAttribute('aria-pressed',selected.has(p.id));b.prepend(photoImage(p.id,'gallery'));let timer,long=false;b.onpointerdown=e=>{if(e.button!==0)return;long=false;timer=setTimeout(()=>{long=true;multi=true;selected.add(p.id);render();},550);};b.onpointerup=b.onpointerleave=b.onpointercancel=()=>clearTimeout(timer);b.onclick=()=>{if(long){long=false;return;}choose(p.id);};const coordinates=text('p',compactCoordinates(p.location));coordinates.className='gallery-coordinates';card.append(b,photoAreaInfo(p,{collapsed:true}),coordinates,text('p',compactPhotoLines(p,0)[3]));$('gallery').append(card);}$('multi').textContent=multi?'結束多選':'選取多張';$('multi').setAttribute('aria-pressed',multi);$('selectionCount').textContent=`已選 ${selected.size} 張；本日待整理 ${dayPhotos().filter(p=>!assigned.has(p.id)).length} 張`;$('appendToEditor').disabled=$('deleteSelected').disabled=$('rotateLeft').disabled=$('rotateRight').disabled=$('compose').disabled=!selected.size;$('cropSelected').disabled=selected.size!==1;$('returnToEditor').hidden=!edit;$('compose').hidden=!!edit;$('groupList').replaceChildren();if(!groups.some(groupInDay))$('groupList').append(text('p','本工作日尚無紀錄集。請到待整理照片選取照片並記事。'));const ordered=groups.filter(groupInDay).sort(compareGroups);$('toggleGroupOrder').disabled=ordered.length<2;$('groupOrderHint').textContent=ordered.length<2?'至少需要 2 組才能調整順序':'即時儲存 · 所有參考與匯出沿用此順序';for(const [index,g] of ordered.entries()){const a=text('article','');a.dataset.groupId=g.id;const orderTools=text('div','');orderTools.className='group-order-controls';orderTools.hidden=!groupOrdering;for(const [label,delta] of [['↑ 上移',-1],['↓ 下移',1]]){const b=text('button',label);b.dataset.direction=String(delta);b.disabled=index+delta<0||index+delta>=ordered.length;b.setAttribute('aria-label',`${groupTitle(g.photoIds)} ${label}`);b.onclick=()=>run(async()=>{await db.saveGroupOrder(activeDay,move(ordered.map(x=>x.id),index,delta),currentProject);await load();say('紀錄集順序已儲存');});orderTools.append(b);}a.append(orderTools,text('h3',`${index+1}. ${groupTitle(g.photoIds)}`),text('p',`${g.photoIds.length} 張 · 更新 ${new Date(g.updatedAt).toLocaleString()}`));const strip=text('div','');strip.className='group-photos';g.photoIds.forEach((id,i)=>{const p=photos.find(p=>p.id===id),figure=text('figure','');figure.append(photoImage(id,'groups'),text('figcaption',compactPhotoLines(p,i)[0]));strip.append(figure);});a.append(strip);const info=text('details','');info.append(text('summary',projectInfo(currentProject).areaReference?'照片資訊與區域判讀':'照片資訊'));g.photoIds.forEach((id,i)=>{const row=text('div','');row.append(text('strong',compactPhotoLines(photos.find(p=>p.id===id),i)[0]),photoInfo(photos.find(p=>p.id===id)));info.append(row);});a.append(info);for(const [label,value] of [['工程描述',g.engineering]]){const note=text('p',`${label}：${value||'未填寫'}`);note.className='note-text';a.append(note);}const e=text('button','編輯／排序照片');e.onclick=()=>openEditor(g);const d=text('button','移除紀錄集（保留原始照片）');d.className='danger';d.onclick=()=>run(async()=>{if(edit?.id===g.id){say('請先關閉或儲存此紀錄集的編輯，再移除。');return;}if(confirm('只移除此紀錄集，原始照片仍保留？')){await db.removeGroup(g.id);await load();say('已移除紀錄集，照片仍保留');}});a.append(e,d);$('groupList').append(a);}if(edit&&active==='editor')renderOrder();}
 $('multi').onclick=()=>{multi=!multi;if(!multi)selected=new Set([...selected].slice(0,1));render();};
 let groupOrdering=false,editingExisting=false;
 $('toggleGroupOrder').onclick=()=>{groupOrdering=!groupOrdering;$('toggleGroupOrder').setAttribute('aria-pressed',String(groupOrdering));render();};
@@ -779,7 +786,7 @@ async function changeProject(id){
  delete $('monForm').dataset.hydratedDay;
  edit=null;editBaseline=null;selected.clear();multi=false;releaseImages('order');
  $('photoAlsoDoc').checked=isNanke()?nankeAlsoDoc:false;
- $('photoDriveFolder').value=readOptionalSetting(projectKey(PHOTO_FOLDER_KEY,currentProject))||'';$('photoDrivePath').value='';
+ $('photoDriveFolder').value=readOptionalSetting(projectKey(PHOTO_FOLDER_KEY,currentProject))||'';$('photoDrivePath').value=savedFolderPath(projectKey(PHOTO_FOLDER_KEY,currentProject),$('photoDriveFolder').value)||($('photoDriveFolder').value?'已儲存的資料夾（請重新選擇）':'');
  await load();if(active==='editor')tab('photos');else tab(active);
  say(`已切換專案：${projectInfo(currentProject).shortName}`);
  }finally{dayTransitioning=false;$('project').disabled=$('workDay').disabled=$('newDay').disabled=false;}
@@ -1124,13 +1131,13 @@ function restoreWorkPhrase(target,x,scope){
 function phrasePickerElements(prefix,panel,target){return {panel:$(panel),search:$(prefix+'PhraseSearch'),list:$(prefix+'PhraseList'),status:$(prefix+'PhraseStatus'),refresh:$('refresh'+(prefix==='photo'?'Photo':'Scope')+'Phrases'),undo:$('undo'+(prefix==='photo'?'Photo':'Scope')+'Phrase'),target:$(target)};}
 photoPhrasePicker=new WorkPhrasePicker({
  ...phrasePickerElements('photo','photoPhrasePanel','monWorkScope'),getContext:()=>phraseContext('monitoring'),
- loadSource:async c=>{const snapshot=await readPhraseMetadata(await db.open()),choices=photoEngineeringPhrases(snapshot,c.day);return {choices,revision:JSON.stringify(choices.map(p=>[p.text,p.revision])),emptyMessage:'本工作日尚無工程描述片語' };},
+ loadSource:async c=>{const snapshot=projectSnapshot(await readPhraseMetadata(await db.open())),choices=photoEngineeringPhrases(snapshot,c.day);return {choices,revision:JSON.stringify(choices.map(p=>[p.text,p.revision])),emptyMessage:'本工作日尚無工程描述片語' };},
  apply:(p,b)=>applyWorkPhrase($('monWorkScope'),p,b,true),restore:x=>restoreWorkPhrase($('monWorkScope'),x,true),
  successMessage:()=>monDraftManager.hasUnsaved(displayedDay())?{text:'已插入，但草稿尚未儲存。',quiet:false}:{text:'已插入',quiet:true}
 });
 scopePhrasePicker=new WorkPhrasePicker({
  ...phrasePickerElements('scope','scopePhrasePanel','engineering'),getContext:()=>phraseContext('engineering'),
- loadSource:async c=>{if(!isNanke())return {phrases:[],emptyMessage:'善化監看紀錄表將在下一版提供'};if(monDraftManager.hasUnsaved(c.day)||monDraftManager.hasCorrupt(c.day)||monDraftManager.hasConflict(c.day)||monDraftManager.isReadBlocked(c.day))throw Error('本工作日監看草稿尚未安全儲存，請先重試儲存或匯出備份；不使用舊草稿冒充最新內容');return {...readSavedScopePhrases(safeGetLocalStorage(),c.day),emptyMessage:'本工作日尚無作業子項目片語' };},
+ loadSource:async c=>{if(!isNanke())return {choices:[],emptyMessage:'善化監看紀錄表將在下一版提供'};if(monDraftManager.hasUnsaved(c.day)||monDraftManager.hasCorrupt(c.day)||monDraftManager.hasConflict(c.day)||monDraftManager.isReadBlocked(c.day))throw Error('本工作日監看草稿尚未安全儲存，請先重試儲存或匯出備份；不使用舊草稿冒充最新內容');return {...readSavedScopePhrases(safeGetLocalStorage(),c.day),emptyMessage:'本工作日尚無作業子項目片語' };},
  apply:(p,b)=>applyWorkPhrase($('engineering'),p,b,false),restore:x=>restoreWorkPhrase($('engineering'),x,false),
  successMessage:()=>({text:'已插入，請按「儲存紀錄集」。',quiet:true})
 });

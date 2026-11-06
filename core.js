@@ -94,8 +94,22 @@ export function previewRotation(p,width,height){
 }
 export function photoMinute(p){const time=p.buttonPressedAt??p.capturedAt??p.importedAt;if(!Number.isFinite(time))return '時間未取得';const d=new Date(time);if(!Number.isFinite(d.getTime()))return '時間未取得';const two=n=>String(n).padStart(2,'0');return `${d.getFullYear()}/${two(d.getMonth()+1)}/${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}${p.source==='gallery'?'(匯入)':''}`;}
 export function compactCoordinates(l){if(!l||!Number.isFinite(l.latitude)||!Number.isFinite(l.longitude)||Math.abs(l.latitude)>90||Math.abs(l.longitude)>180)return '座標未取得';const f=n=>n.toFixed(7).replace(/\.?0+$/,'');return `${f(l.latitude)},${f(l.longitude)}`;}
-export function compactDirection(h){const label=directionLabel(h?.degrees);if(!label)return '方向未取得';const notes=[];if(h.accuracy<0||(typeof h.quality==='string'&&h.quality.includes('不可靠')))notes.push('讀值不可靠');if((h.freshnessAtAcquisitionCompleted??h.freshness)==='過期')notes.push('讀值過期');notes.push('需驗證');return `${label}(${notes.join('，')})`;}
-export function compactPhotoLines(p,index){return [`${index+1}.照片${p?.photoNumber??'?'}`,p?photoMinute(p):'時間未取得',compactCoordinates(p?.location),compactDirection(p?.heading)];}
+export function photoCameraBearing(p){
+ let degrees,method;
+ if(Number.isFinite(p?.cameraBearing)){degrees=p.cameraBearing;method='recorded';}
+ else if(Number.isFinite(p?.heading?.degrees)){
+  const h=p.heading;degrees=h.degrees;method='device-reference';
+  if(h.source==='webkitCompassHeading'){
+   const sky=skyEdgeFromTilt({beta:h.beta,gamma:h.gamma});
+   degrees+=sky??0;
+   method=sky===null?'ios-compass-flat':sky===90||sky===270?'ios-compass-sky-edge-v1':'ios-compass-portrait-unverified';
+  }
+ }else return {degrees:null,label:null,method:null};
+ degrees=Number(((degrees%360+360)%360).toFixed(1))%360;
+ return {degrees,label:directionLabel(degrees),method};
+}
+export function compactDirection(p){const h=p?.heading,label=photoCameraBearing(p).label;if(!label)return '方向未取得';const notes=[];if(h?.accuracy<0||(typeof h?.quality==='string'&&h.quality.includes('不可靠')))notes.push('讀值不可靠');if((h?.freshnessAtAcquisitionCompleted??h?.freshness)==='過期')notes.push('讀值過期');notes.push('需驗證');return `${label}(${notes.join('，')})`;}
+export function compactPhotoLines(p,index){return [`${index+1}.照片${p?.photoNumber??'?'}`,p?photoMinute(p):'時間未取得',compactCoordinates(p?.location),compactDirection(p)];}
 
 export function zoomCapability(cap,reported){const z=cap?.zoom;if(!z||!Number.isFinite(z.min)||!Number.isFinite(z.max)||z.min<=0||z.max<=z.min||!Number.isFinite(reported)||reported<z.min||reported>z.max)return null;return {min:z.min,max:z.max,step:Number.isFinite(z.step)&&z.step>0?z.step:.1};}
 export function snapZoom(value,range){if(!Number.isFinite(value))throw Error('縮放倍率無效');const n=Math.max(range.min,Math.min(range.max,value)),snapped=range.min+Math.round((n-range.min)/range.step)*range.step;return Number(Math.max(range.min,Math.min(range.max,snapped)).toFixed(6));}
