@@ -786,16 +786,29 @@ body.keyboard-open header nav { display: none; }
 .photos-top-tools > #repairPhotos { flex-basis: 100%; }
 
 /* Shanhua's independent daily form; do not restyle Nanke controls. */
-.shanhua-form { max-width: 760px; margin-inline: auto; overflow-wrap: anywhere; }
-#shanhuaForm { display: grid; gap: 16px; }
-.shanhua-form label { display: grid; gap: 6px; min-width: 0; }
-.shanhua-form input:not([type="checkbox"]), .shanhua-form textarea,
-.shanhua-form select { width: 100%; min-width: 0; box-sizing: border-box; }
-#shanhuaForm label:has(input[type="checkbox"]) { display: flex; align-items: center; gap: 12px; min-height: 44px; }
-.shanhua-form input[type="checkbox"] { width: 22px; height: 22px; }
-.shanhua-image { margin-block: 16px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-s); }
-.shanhua-image img { display: block; max-width: 100%; max-height: 240px; object-fit: contain; margin-block: 12px; }
-.shanhua-image img[hidden], .shanhua-image button[hidden] { display: none; }
-#shanhuaStatus { white-space: pre-wrap; }
-#shanhuaDownload { background: var(--brand); color: var(--surface); }
-.shanhua-form .actions { margin-top: 16px; }
+#shanhuaMonitoring { max-width: 760px; margin-inline: auto; overflow-wrap: anywhere; }
+#shanhuaMonitoring [hidden] { display: none !important; }
+#shanhuaMonitoring .step-card { min-width: 0; }
+#shanhuaMonitoring .step-card h3 { display: flex; align-items: center; gap: 10px; }
+#shanhuaMonitoring .step-no { margin-right: 0; }
+#shanhuaMonitoring fieldset { min-width: 0; margin: 14px 0 20px; padding: 18px 12px 8px; border: 1px solid var(--line); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-1); }
+#shanhuaMonitoring legend { max-width: 100%; padding: 4px 12px; font-size: 13px; font-weight: 700; letter-spacing: .06em; color: var(--brand); background: var(--brand-soft); border-radius: 999px; }
+#shanhuaMonitoring fieldset fieldset { padding: 8px 0; margin: 8px 0; border: 0; border-radius: 0; box-shadow: none; }
+#shanhuaMonitoring fieldset fieldset legend { background: transparent; padding-inline: 0; }
+#shanhuaMonitoring label { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0 0 14px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
+#shanhuaMonitoring input:not([type=checkbox]):not([type=radio]), #shanhuaMonitoring textarea { width: 100%; min-width: 0; max-width: 100%; font-size: 16px; font-weight: 400; }
+#shanhuaMonitoring label.shanhua-check { flex-direction: row; align-items: center; gap: 12px; min-height: 48px; margin-bottom: 4px; cursor: pointer; }
+#shanhuaMonitoring input[type=checkbox], #shanhuaMonitoring input[type=radio] { width: 24px; height: 24px; min-height: 24px; margin: 0; flex-shrink: 0; accent-color: var(--brand); }
+#shanhuaMonitoring #shanhua-landform-text { flex: 1; width: 0; }
+#shanhuaMonitoring label.shanhua-check > span { flex-shrink: 0; }
+#shanhuaMonitoring .shanhua-small-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+#shanhuaMonitoring .carried-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; font-size: 11px; font-weight: 500; color: var(--brand); background: var(--brand-soft); border-radius: 999px; letter-spacing: 0; vertical-align: middle; }
+#shanhuaMonitoring .shanhua-image { margin-block: 16px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-s); }
+#shanhuaMonitoring .shanhua-image img { display: block; max-width: 100%; max-height: 200px; object-fit: contain; margin-block: 12px; }
+#shanhuaMonitoring .shanhua-image button { margin: 0 6px 6px 0; }
+#shanhuaMonitoring .shanhua-file-input { position: absolute; width: 1px !important; height: 1px; min-height: 0; padding: 0; border: 0; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+#shanhuaMonitoring #shanhuaStatus { white-space: pre-wrap; }
+#shanhuaMonitoring #shanhuaDownload { width: 100%; min-height: 54px; font-size: 17px; font-weight: 700; background: var(--brand); border-color: var(--brand); color: #fff; }
+#shanhuaMonitoring #shanhuaDownload:hover:enabled { background: var(--brand-press); border-color: var(--brand-press); }
+#shanhuaMonitoring #shanhuaCloud { margin-top: 12px; }
+#shanhuaMonitoring #shanhuaCloud button { margin: 0 4px 8px 0; }

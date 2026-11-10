@@ -6,11 +6,11 @@ const R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const REL='http://schemas.openxmlformats.org/package/2006/relationships';
 const namespaces=`xmlns:w="${W}" xmlns:r="${R}" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"`;
 const font='<w:rPr><w:rFonts w:ascii="DFKai-SB" w:hAnsi="DFKai-SB" w:eastAsia="DFKai-SB"/><w:sz w:val="24"/><w:lang w:val="zh-TW" w:eastAsia="zh-TW"/></w:rPr>';
-function paragraph(value){return `<w:p><w:r>${font}${value.replace(/\r\n?/g,'\n').split('\n').map(s=>`<w:t xml:space="preserve">${xmlText(s)}</w:t>`).join('<w:br/>')}</w:r></w:p>`;}
+function paragraph(value){return `<w:p><w:r>${font}${value.replace(/\r\n?/g,'\n').split('\n').map(s=>s.split('\u0000').map(part=>`<w:t xml:space="preserve">${xmlText(part)}</w:t>`).join('</w:r><w:r><w:sym w:font="Wingdings 2" w:char="F0A3"/></w:r><w:r>'+font)).join('<w:br/>')}</w:r></w:p>`;}
 function cell(span,value,merge='',image=''){return `<w:tc><w:tcPr><w:gridSpan w:val="${span}"/>${merge}</w:tcPr>${paragraph(value)}${image}</w:tc>`;}
 const row=cells=>`<w:tr>${cells.join('')}</w:tr>`;
-function table(columns,rows){const borders=['top','left','bottom','right','insideH','insideV'].map(e=>`<w:${e} w:val="single" w:sz="4"/>`).join('');return `<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblBorders>${borders}</w:tblBorders><w:tblCellMar><w:top w:w="72" w:type="dxa"/><w:bottom w:w="72" w:type="dxa"/><w:left w:w="72" w:type="dxa"/><w:right w:w="72" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${Array.from({length:columns},()=>`<w:gridCol w:w="${Math.floor(9638/columns)}"/>`).join('')}</w:tblGrid>${rows.join('')}</w:tbl>`;}
-const mark=value=>value?'▓':'⬜';
+function table(columns,rows){const borders=['top','left','bottom','right','insideH','insideV'].map(e=>`<w:${e} w:val="single" w:sz="4"/>`).join('');return `<w:tbl><w:tblPr><w:tblW w:w="9067" w:type="dxa"/><w:tblBorders>${borders}</w:tblBorders><w:tblCellMar><w:top w:w="72" w:type="dxa"/><w:bottom w:w="72" w:type="dxa"/><w:left w:w="72" w:type="dxa"/><w:right w:w="72" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${columns.map(width=>`<w:gridCol w:w="${width}"/>`).join('')}</w:tblGrid>${rows.join('')}</w:tbl>`;}
+const mark=value=>value?'▓':'\u0000';
 const blank=value=>value||'＿＿';
 export async function shanhuaDocx(form,{map=null,monitorSignature=null,leaderSignature=null}={}){
  const f=validateShanhuaForm(form),media=[],relations=[`<Relationship Id="header" Type="${R}/header" Target="header1.xml"/>`];
@@ -20,7 +20,7 @@ export async function shanhuaDocx(form,{map=null,monitorSignature=null,leaderSig
   const id=media.length+1,ext=image.blob.type==='image/png'?'png':'jpg';
   // Allow for both 72-twip cell margins. A monitor signature has one of
   // four grid columns; the leader has two. Wide images must not widen the table.
-  const cellWidth=kind==='map'?9638:Math.floor(9638/4)*(kind==='leader'?2:1);
+  const cellWidth=kind==='map'?9067:kind==='leader'?1624+1566:2907;
   const availableWidth=(cellWidth-144)*635;
   const scale=kind==='map'?availableWidth/image.width:Math.min(540000/image.height,availableWidth/image.width);
   const cx=Math.round(image.width*scale),cy=Math.round(image.height*scale);
@@ -45,7 +45,7 @@ export async function shanhuaDocx(form,{map=null,monitorSignature=null,leaderSig
   row([cell(5,f.mapCaption,'',picture(map,'map'))])
  ];
  const signatures=[row([cell(4,'監看照片及過程說明')]),row([cell(1,'監看人簽署','',picture(monitorSignature,'monitor')),cell(2,'計畫負責人簽署','',picture(leaderSignature,'leader')),cell(1,`文件製作日期\n${rocDate(f.docDate)}`)])];
- const document=XML+`<w:document ${namespaces}><w:body>${paragraph('監看紀錄表_'+rocDate(f.day))}${table(5,rows)}${paragraph('')}${table(4,signatures)}${paragraph('')}<w:sectPr><w:headerReference w:type="default" r:id="header"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567"/></w:sectPr></w:body></w:document>`;
+ const document=XML+`<w:document ${namespaces}><w:body>${paragraph('監看紀錄表_'+rocDate(f.day))}${table([1549,6,3118,1559,2835],rows)}${paragraph('')}${table([2907,1624,1566,2970],signatures)}${paragraph('')}<w:sectPr><w:headerReference w:type="default" r:id="header"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567"/></w:sectPr></w:body></w:document>`;
  const types=XML+`<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>`;
  return zipStore([
   ['[Content_Types].xml',new Blob([types])],

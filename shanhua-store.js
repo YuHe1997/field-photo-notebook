@@ -10,7 +10,7 @@ function openFiles(){
  }).catch(error=>{opening=null;throw error;});
  return opening;
 }
-function validateKey(key){if(typeof key!=='string'||!(/^(signature:(monitor|leader)|map:\d{4}-\d{2}-\d{2})$/).test(key))throw Error('圖片索引無效');}
+function validateKey(key){if(typeof key!=='string'||!(/^(signature:(monitor|leader)|map:(current|\d{4}-\d{2}-\d{2}))$/).test(key))throw Error('圖片索引無效');}
 async function transaction(key,mode,action){
  validateKey(key);const db=await openFiles();return new Promise((resolve,reject)=>{
   const tx=db.transaction('files',mode),request=action(tx.objectStore('files'));let value;
@@ -18,8 +18,18 @@ async function transaction(key,mode,action){
   tx.oncomplete=()=>resolve(value??null);tx.onerror=tx.onabort=()=>reject(tx.error||Error('圖片儲存未完成'));
  });
 }
-export const getShanhuaFile=key=>transaction(key,'readonly',store=>store.get(key));
-export const removeShanhuaFile=key=>transaction(key,'readwrite',store=>store.delete(key));
+export async function getShanhuaFile(key){
+ const value=await transaction(key,'readonly',store=>store.get(key));
+ if(key!=='map:current')return value;
+ if(value!==null)return value.removed===true?null:value;
+ const db=await openFiles();
+ return new Promise((resolve,reject)=>{
+  const tx=db.transaction('files','readonly'),request=tx.objectStore('files').openCursor();let latest='',image=null;
+  request.onsuccess=()=>{const cursor=request.result;if(!cursor)return;const name=cursor.key;if(typeof name==='string'&&/^map:\d{4}-\d{2}-\d{2}$/.test(name)&&name>latest){latest=name;image=cursor.value;}cursor.continue();};
+  tx.oncomplete=()=>resolve(image);tx.onerror=tx.onabort=()=>reject(tx.error||Error('圖片讀取未完成'));
+ });
+}
+export const removeShanhuaFile=key=>transaction(key,'readwrite',store=>key==='map:current'?store.put({removed:true},key):store.delete(key));
 export async function resizeShanhuaImage(blob,{signature=false}={}){
  if(!(blob instanceof Blob)||!blob.type.startsWith('image/'))throw Error('請選擇圖片檔案');
  const url=URL.createObjectURL(blob),image=new Image();

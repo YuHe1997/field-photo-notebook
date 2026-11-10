@@ -1,5 +1,5 @@
 import * as db from './db.js';
-import {emptyShanhuaForm,validateShanhuaForm,rocDate,SHANHUA_PROJECT_NAME} from './shanhua-form.js';
+import {emptyShanhuaForm,validateShanhuaForm,rocDate,SHANHUA_PROJECT_NAME,SHANHUA_CARRY_FIELDS,previousWorkContent} from './shanhua-form.js';
 import {shanhuaDocx} from './shanhua-docx.js';
 import {getShanhuaFile,saveShanhuaFile,removeShanhuaFile} from './shanhua-store.js';
 import {PROJECTS,DEFAULT_PROJECT,projectOf,projectInfo,projectKey,daysKey,monitoringDraftKey,backupRecord,restoreProjectRecords,numberIdentity} from './projects.js';
@@ -753,45 +753,71 @@ $('compose').onclick=()=>{if(!selected.size){say('請先選照片');return;}open
 $('backup').onclick=()=>run(async()=>{say('正在建立本機備份（交易快照；不含未提交資料）…');const snapshot=await db.snapshot();const entries=[],records=[];for(const p of snapshot.photos){const blob=snapshot.assets.find(a=>a.id===p.id)?.original;if(!blob)throw Error('原始影像缺失');const path=`originals/${p.id}.bin`;entries.push([path,blob]);records.push({...backupRecord(p),path,size:blob.size,sha256:await digest(blob)});}for(const g of snapshot.groups)validateGroup(g,new Set(snapshot.photos.map(p=>p.id)));const manifest={schema:1,createdAt:Date.now(),snapshotStartedAt:snapshot.startedAt,snapshotCompletedAt:snapshot.completedAt,completeness:'單一唯讀交易中的已提交資料；不含未儲存表單／待存照片／快照之後提交資料',photos:records,groups:snapshot.groups.map(backupRecord),workDays:readDays(DEFAULT_PROJECT).days,activeWorkDay:readDays(DEFAULT_PROJECT).active??localDay(),numberCounters:db.numberCounters(),activeProject:currentProject,projectStates:Object.fromEntries(PROJECTS.map(p=>[p.id,{...readDays(p.id),numberCounters:db.numberCounters(p.id)}]))};entries.push(['area-reference.json',new Blob([JSON.stringify({schema:1,calculatedAt:Date.now(),meaning:'暫定區界及本次備份時計算的參考；還原照片後仍依 App 當前區界回算，不自動匯入或信任此區界',dataset:AREA_DATA,photos:snapshot.photos.map(p=>({photoId:p.id,reference:areaReference(p)}))},null,2)],{type:'application/json'})]);entries.push(['manifest.json',new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'})],['notes.txt',new Blob([snapshot.groups.map(g=>`${g.title}\n工作日：${g.workDay??'舊版請參照各照片 workDay'}\n工程描述：${g.engineering}\n${g.notes?'舊版備註（保留）：'+g.notes+'\n':''}${g.legacyTitle?'舊版名稱（保留）：'+g.legacyTitle+'\n':''}順序：${g.photoIds.join(', ')}\n`).join('\n')])],['README.txt',new Blob(['原始影像在 originals/；檔名與 MIME 在 manifest.json。GPS 是裝置位置；方向不是可靠鏡頭朝向。相機讀值以按鈕時間為基準，不是曝光資料。舊版 capturedAt / ageAtShutterMs 亦是按鈕時間／年齡。沒有 EXIF 嵌入或雲端同步。'])]);const archive=await tar(entries),url=URL.createObjectURL(archive),a=document.createElement('a');a.href=url;a.download=`field-notebook-${Date.now()}.tar`;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);say('已交給瀏覽器下載；請確認下載完成（無法驗證使用者是否取消）');});
 $('restore').onchange=()=>run(async()=>{const file=$('restore').files[0];if(!file)return;say('驗證備份中…');const entries=await untar(file),m=JSON.parse(await entries.get('manifest.json')?.text()),local=await db.snapshot();if(m.schema!==1||!Array.isArray(m.photos)||!Array.isArray(m.groups))throw Error('不支援的備份');Object.assign(m,restoreProjectRecords(m));if(m.projectStates!==undefined){if(!m.projectStates||typeof m.projectStates!=='object'||Array.isArray(m.projectStates))throw Error('專案狀態格式無效');for(const [id,s] of Object.entries(m.projectStates)){if(!PROJECTS.some(p=>p.id===id)||!s||!Array.isArray(s.days)||s.days.some(d=>!validDay(d))||(s.active!==null&&!validDay(s.active))||!s.numberCounters||typeof s.numberCounters!=='object'||Array.isArray(s.numberCounters)||Object.entries(s.numberCounters).some(([d,n])=>!validDay(d)||!Number.isSafeInteger(n)||n<1))throw Error('專案工作日／計數格式無效');}}if(m.workDays!==undefined&&(!Array.isArray(m.workDays)||m.workDays.some(d=>!validDay(d))))throw Error('工作日格式無效');if(m.activeWorkDay!==undefined&&!validDay(m.activeWorkDay))throw Error('目前工作日格式無效');if(m.numberCounters!==undefined&&(typeof m.numberCounters!=='object'||m.numberCounters===null||Array.isArray(m.numberCounters)||Object.entries(m.numberCounters).some(([d,n])=>!validDay(d)||!Number.isSafeInteger(n)||n<1)))throw Error('編號計數格式無效');const incomingNumbers=new Set();const ids=new Set(),gids=new Set(),staged=[];for(const p of m.photos){if(p.workDay!==undefined&&!validDay(p.workDay)||p.photoNumber!==undefined&&(!Number.isSafeInteger(p.photoNumber)||p.photoNumber<1)||p.displayRotation!==undefined&&![0,90,180,270].includes(p.displayRotation))throw Error('照片工作日／編號／旋轉格式無效');if(p.crop!==undefined&&!validCrop(p.crop))throw Error('照片裁切資料格式無效');if(p.workDay&&p.photoNumber){const numberKey=numberIdentity(p);if(incomingNumbers.has(numberKey)||local.photos.some(x=>numberIdentity(x)===numberKey))throw Error('工作日照片編號重複或與本機衝突');incomingNumbers.add(numberKey);}if(typeof p.id!=='string'||!/^[-a-zA-Z0-9]+$/.test(p.id)||ids.has(p.id)||local.photos.some(x=>x.id===p.id)||p.path!==`originals/${p.id}.bin`||typeof p.originalName!=='string'||!['camera','gallery'].includes(p.source)||typeof p.mime!=='string'||!p.mime.startsWith('image/'))throw Error('照片格式／ID 重複或與本機衝突');ids.add(p.id);const b=entries.get(p.path);if(!b||b.size!==p.size||await digest(b)!==p.sha256)throw Error('影像大小或雜湊不符');const {path,size,sha256,...photo}=p;staged.push({photo,blob:new Blob([b],{type:p.mime})});}for(const g of m.groups){if(typeof g.id!=='string'||typeof g.title!=='string'||typeof g.notes!=='string'||typeof g.engineering!=='string'||gids.has(g.id)||local.groups.some(x=>x.id===g.id))throw Error('紀錄集格式／ID 衝突');gids.add(g.id);validateGroup(g,ids);}if(!confirm(`已驗證 ${staged.length} 張照片、${m.groups.length} 組，匯入本機？`))return;await db.transaction(['photos','assets','groups'],tx=>{for(const x of staged){tx.objectStore('photos').add(x.photo);tx.objectStore('assets').add({id:x.photo.id,original:x.blob});}for(const g of m.groups)tx.objectStore('groups').add(g);});db.mergeCounters(m.numberCounters);const states=m.projectStates??{[DEFAULT_PROJECT]:{days:m.workDays??[],active:m.activeWorkDay??null,numberCounters:m.numberCounters??{}}};for(const [id,s] of Object.entries(states)){db.mergeCounters(s.numberCounters,id);const old=readDays(id);safeGetLocalStorage()?.setItem(daysKey(id),JSON.stringify({days:[...new Set([...old.days,...s.days])].sort(),active:s.active??old.active}));}dayState=readDays();activeDay=dayState.active;monDisplayedDay=null;await load();say('備份已完整還原（原圖與顯示旋轉分開保存）');$('restore').value='';});
 const SHANHUA_ID='shanhua-1350pscp',SHANHUA_REMEMBER_KEY=projectKey('field-shanhua-remembered',SHANHUA_ID);
-const shanhuaRememberFields=['owner','contractor','location','placeName','site','suggestion'];
+const shanhuaRememberFields=SHANHUA_CARRY_FIELDS;
+let shanhuaCarried=[];
 let shanhuaDay=null,shanhuaWorking=false,shanhuaReady=false,shanhuaGeneration=0,shanhuaDirty=false;
 const shanhuaUrls=new Map();
 function buildShanhuaUI(){
  const box=text('div','');box.id='shanhuaMonitoring';box.className='shanhua-form';
- box.append(text('h2','善化監看紀錄表'),text('p',SHANHUA_PROJECT_NAME));
+ box.append(text('h2','善化監看紀錄表'));
  const form=document.createElement('form');form.id='shanhuaForm';form.noValidate=true;form.onsubmit=e=>e.preventDefault();
- function field(path,label,{type='text',options=null}={}){
-  const wrap=text('label',label),input=document.createElement(options?'select':type==='textarea'?'textarea':'input');
-  input.id='shanhua-'+path.replaceAll('.','-');input.dataset.shanhuaField=path;
-  if(options)for(const [value,name] of options){const option=text('option',name);option.value=value;input.append(option);}
-  else if(type==='textarea')input.rows=3;else input.type=type;
-  wrap.append(input);form.append(wrap);return input;
+ function tag(parent,key){const badge=text('span','沿用');badge.className='carried-tag';badge.dataset.carried=key;badge.hidden=true;parent.append(badge);}
+ function card(number,title){const section=text('section','');section.className='step-card';const heading=text('h3','');const no=text('span',number);no.className='step-no';heading.append(no,document.createTextNode(title));section.append(heading);form.append(section);return section;}
+ function group(parent,title,key){const set=document.createElement('fieldset'),legend=text('legend',title);if(key)tag(legend,key);set.append(legend);parent.append(set);return set;}
+ function field(parent,path,label,{type='text',badge=true,value=null}={}){
+  const wrap=text('label',''),caption=text('span',label),input=document.createElement(type==='textarea'?'textarea':'input');
+  input.id='shanhua-'+path.replaceAll('.','-')+(value?'-'+value:'');input.dataset.shanhuaField=path;
+  if(type==='textarea')input.rows=3;else input.type=type;
+  if(value){input.value=value;input.name='shanhua-'+path;}
+  if(badge&&SHANHUA_CARRY_FIELDS.concat('report').includes(path))tag(caption,path);
+  if(type==='checkbox'||type==='radio'){wrap.className='shanhua-check';wrap.append(input,caption);}else wrap.append(caption,input);
+  parent.append(wrap);return input;
  }
- const date=text('p','');date.id='shanhuaDay';form.append(date);
- field('docDate','文件製作日期',{type:'date'});
- for(const [path,label] of [['owner','開發業主'],['contractor','施工單位'],['location','地點'],['placeName','小地名'],['site','相關遺址']])field(path,label);
- for(const [path,label] of [['workContent','工程內容（作業項目、範圍與深度）'],['stratigraphy','地層堆積狀況（土質、土色、堆積型態）']])field(path,label,{type:'textarea'});
- form.append(text('h3','地層勾選'));
- field('landform.checked','地貌',{type:'checkbox'});field('landform.text','地貌說明');
- for(const [path,label] of [['noExcavation','無下挖'],['disturbedFill','擾亂填覆地層'],['naturalLayer','原堆積自然地層'],['culturalLayer.checked','原堆積文化層（測繪地層圖）']])field(path,label,{type:'checkbox'});
- for(const [path,label] of [['layers','文化層層數'],['thickness','文化層厚度（公分）'],['from','文化層起深（地表下公分）'],['to','文化層迄深（地表下公分）']])field('culturalLayer.'+path,label);
- form.append(text('h3','遺物出土狀況'));
- field('artifacts.status','遺物出土選項',{options:[['none','無遺物出土'],['sparse','零星遺物出土'],['dense','遺物密集出土']]});
- field('artifacts.position','遺物位置');field('artifacts.depth','遺物深度');
- for(const [path,label] of [['features','遺跡、遺物'],['suggestion','相關建議'],['report','陳報資訊'],['mapCaption','位置圖說明文字']])field(path,label,{type:'textarea'});
- form.addEventListener('input',()=>{shanhuaDirty=true;try{saveShanhuaDraft();}catch(e){$('shanhuaStatus').textContent='草稿未儲存：'+e.message;}});
- box.append(form,text('h3','位置圖與簽名'));
+ const basics=card('01','基本資料');basics.append(text('p',SHANHUA_PROJECT_NAME));
+ const date=text('p','');date.id='shanhuaDay';basics.append(date);
+ field(basics,'docDate','文件製作日期',{type:'date'});
+ const details=document.createElement('details');details.id='shanhuaBasics';details.append(text('summary','沿用上次　修改'));basics.append(details);
+ for(const [path,label] of [['owner','開發業主'],['contractor','施工單位'],['location','地點'],['placeName','小地名'],['site','相關遺址']])field(details,path,label);
+ const today=card('02','填寫今日紀錄'),work=group(today,'工程內容（作業項目、範圍與深度）');
+ field(work,'workContent','今日工程內容',{type:'textarea'}).placeholder='例：今日繼續下挖3公尺並設置新管線…';
+ const previous=text('button','帶入昨天內容');previous.id='shanhuaPrevWork';previous.type='button';work.append(previous);
+ previous.onclick=()=>runShanhua(async()=>{
+  const storage=safeGetLocalStorage(),drafts={},prefix=monitoringDraftKey('',SHANHUA_ID);
+  if(storage)for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key?.startsWith(prefix)){try{drafts[key.slice(prefix.length)]=JSON.parse(storage.getItem(key));}catch{ /* Preserve unreadable drafts. */ }}}
+  const found=previousWorkContent(shanhuaDay,drafts);if(!found){$('shanhuaStatus').textContent='沒有更早的工程內容可帶入';return;}
+  const input=$('shanhua-workContent');if(input.value&&!confirm('工程內容已有文字，要以 '+found.day+' 的內容覆蓋？'))return;
+  input.value=found.workContent;input.dispatchEvent(new Event('input',{bubbles:true}));
+ });
+ const strata=group(today,'地層堆積');field(strata,'stratigraphy','地層堆積狀況（土質、土色、堆積型態）',{type:'textarea'});
+ const checks=group(strata,'地層勾選','landform noExcavation disturbedFill naturalLayer culturalLayer');
+ const landform=field(checks,'landform.checked','地貌',{type:'checkbox'}).parentElement;
+ const landformText=document.createElement('input');landformText.type='text';landformText.id='shanhua-landform-text';landformText.dataset.shanhuaField='landform.text';landformText.setAttribute('aria-label','地貌說明');landform.append(landformText);
+ for(const [path,label] of [['noExcavation','無下挖'],['disturbedFill','擾亂填覆地層'],['naturalLayer','原堆積自然地層']])field(checks,path,label,{type:'checkbox',badge:false});
+ field(checks,'culturalLayer.checked','原堆積文化層（測繪地層圖）',{type:'checkbox'});
+ const cultureFields=text('div','');cultureFields.id='shanhuaCultureFields';cultureFields.className='shanhua-small-grid';checks.append(cultureFields);
+ for(const [path,label] of [['layers','層數'],['thickness','厚度（公分）'],['from','起深（公分）'],['to','迄深（公分）']])field(cultureFields,'culturalLayer.'+path,label);
+ const artifacts=group(today,'遺物出土狀況','artifacts');
+ for(const [value,label] of [['none','無遺物出土'],['sparse','零星遺物出土'],['dense','遺物密集出土']])field(artifacts,'artifacts.status',label,{type:'radio',value});
+ const artifactFields=text('div','');artifactFields.id='shanhuaArtifactFields';artifacts.append(artifactFields);field(artifactFields,'artifacts.position','位置');field(artifactFields,'artifacts.depth','深度');
+ for(const [path,label] of [['features','遺跡、遺物'],['report','陳報資訊']])field(today,path,label,{type:'textarea'});
+ const suggestion=document.createElement('details');suggestion.append(text('summary','相關建議（沿用，通常不用改）'));today.append(suggestion);field(suggestion,'suggestion','相關建議',{type:'textarea'});
+ form.addEventListener('input',e=>{if(!shanhuaReady)return;const key=e.target.dataset.shanhuaField?.split('.')[0];shanhuaCarried=shanhuaCarried.filter(field=>field!==key);updateShanhuaPresentation();shanhuaDirty=true;try{saveShanhuaDraft();}catch(e){$('shanhuaStatus').textContent='草稿未儲存：'+e.message;}});
+ const assets=card('03','位置圖與簽名');field(assets,'mapCaption','位置圖說明',{type:'textarea'});
+ box.append(form);
  for(const [kind,label] of [['map','施工與監看位置圖'],['monitor','監看人簽名'],['leader','計畫負責人簽名']]){
   const section=text('div','');section.className='shanhua-image';
   const input=document.createElement('input');input.type='file';input.accept='image/*';input.id='shanhuaImage-'+kind;
-  const wrap=text('label',label);wrap.append(input);
+  input.className='shanhua-file-input';
+  const wrap=text('label',label);wrap.htmlFor=input.id;
+  const choose=text('button','選擇圖片');choose.type='button';choose.id='shanhuaChoose-'+kind;choose.onclick=()=>input.click();
   const image=document.createElement('img');image.id='shanhuaPreview-'+kind;image.alt=label;image.hidden=true;
   const remove=text('button','移除'+label);remove.type='button';remove.id='shanhuaRemove-'+kind;remove.hidden=true;
   input.onchange=()=>runShanhua(async()=>{const file=input.files[0];if(!file)return;const key=shanhuaImageKey(kind);await saveShanhuaFile(key,file);await refreshShanhuaImages();$('shanhuaStatus').textContent=label+'已儲存於本機';input.value='';});
   remove.onclick=()=>runShanhua(async()=>{await removeShanhuaFile(shanhuaImageKey(kind));await refreshShanhuaImages();$('shanhuaStatus').textContent=label+'已移除';});
-  section.append(wrap,image,remove);box.append(section);
+  section.append(wrap,input,choose,remove,image);if(kind==='map'){const hint=text('p','沿用上次的位置圖');hint.id='shanhuaMapHint';hint.hidden=true;section.append(hint);}assets.append(section);
  }
- const note=text('p','簽名與位置圖只存在本機瀏覽器，換手機需重新上傳。草稿文字也只存在本機 localStorage，不在 TAR 備份內；簽名與位置圖亦不在 TAR 備份內。');note.className='export-note';box.append(note);
+ const note=text('p','簽名與位置圖只存在本機瀏覽器，換手機需重新上傳。草稿文字也只存在本機 localStorage，不在 TAR 備份內；簽名與位置圖亦不在 TAR 備份內。');note.className='export-note';assets.append(note);
+ const output=card('04','輸出'),cloud=document.createElement('details');cloud.id='shanhuaCloud';cloud.append(text('summary','上傳到 Google 雲端（轉成 Google 文件）'));
  const folder=document.createElement('input');folder.type='hidden';folder.id='shanhuaFolder';
  const path=document.createElement('input');path.id='shanhuaFolderPath';path.readOnly=true;path.placeholder='尚未選擇資料夾';
  const folderLabel=text('label','善化 Google 雲端資料夾');folderLabel.append(path);
@@ -801,18 +827,27 @@ function buildShanhuaUI(){
  const upload=text('button','上傳到 Google 雲端（轉成 Google 文件）');upload.id='shanhuaUpload';upload.type='button';
  upload.onclick=()=>runShanhua(async()=>{if(!hasToken())throw Error('尚未登入 Google，請先在 Google 雲端設定連線帳號');const folderId=parseDriveId(folder.value);if(!folderId)throw Error('請先選擇善化雲端資料夾');const day=shanhuaDay,{blob,name}=await prepareShanhuaDoc();await uploadDayDoc(day,blob,folderId,{name});$('shanhuaStatus').textContent='已上傳 Google 文件：'+name;});
  const connect=text('button','連線 Google 帳號');connect.id='shanhuaConnect';connect.type='button';connect.onclick=()=>runShanhua(async()=>{await authorize();$('shanhuaStatus').textContent='Google 已連線，請選擇善化雲端資料夾';});
- const actions=text('div','');actions.className='actions';actions.append(download,upload);
+ cloud.append(folder,folderLabel,connect,browse,upload);
  const status=text('p','');status.id='shanhuaStatus';status.setAttribute('role','status');
- box.append(folder,folderLabel,connect,browse,actions,status);return box;
+ const reset=text('button','以新草稿覆寫');reset.id='shanhuaResetDraft';reset.type='button';reset.hidden=true;
+ reset.onclick=()=>{if(!confirm('確定以新草稿覆寫此日無法讀取的草稿？原草稿將被取代。'))return;try{const storage=safeGetLocalStorage();if(!storage)throw Error('本機儲存空間無法使用');let remembered={};try{remembered=JSON.parse(storage.getItem(SHANHUA_REMEMBER_KEY)||'{}');}catch{ /* Invalid remembered JSON must not block an explicit reset. */ }const fresh=emptyShanhuaForm(shanhuaDay,remembered);storage.setItem(monitoringDraftKey(shanhuaDay,SHANHUA_ID),JSON.stringify(fresh));shanhuaDay=null;hydrateShanhuaUI();}catch(e){status.textContent='未完成：'+e.message;}};
+ output.append(download,cloud,status,reset);return box;
 }
 function readShanhuaInputs(){
  if(!shanhuaReady||!shanhuaDay)throw Error('善化草稿尚未載入，未改寫資料');
  const form=emptyShanhuaForm(shanhuaDay);
  for(const input of $('shanhuaForm').querySelectorAll('[data-shanhua-field]')){
   const parts=input.dataset.shanhuaField.split('.'),key=parts.pop();let target=form;
+  if(input.type==='radio'&&!input.checked)continue;
   for(const part of parts)target=target[part];target[key]=input.type==='checkbox'?input.checked:input.value;
  }
- return validateShanhuaForm(form);
+ form.carried=[...shanhuaCarried];return validateShanhuaForm(form);
+}
+function updateShanhuaPresentation(){
+ for(const tag of $('shanhuaForm').querySelectorAll('[data-carried]'))tag.hidden=!tag.dataset.carried.split(/\s+/).some(key=>shanhuaCarried.includes(key));
+ $('shanhuaBasics').querySelector('summary').textContent='沿用上次：'+['contractor','location','placeName','site'].map(key=>$('shanhua-'+key).value).join('／')+'　修改';
+ $('shanhuaCultureFields').hidden=!$('shanhua-culturalLayer-checked').checked;
+ $('shanhuaArtifactFields').hidden=$('shanhua-artifacts-status-none').checked;
 }
 function saveShanhuaDraft(){
  if(!shanhuaDay)return;
@@ -824,29 +859,39 @@ function saveShanhuaDraft(){
 function hydrateShanhuaUI(){
  if(!validDay(activeDay)||shanhuaDay===activeDay)return;
  shanhuaDay=activeDay;shanhuaReady=false;shanhuaDirty=false;
+ $('shanhuaDay').textContent='監看日期：'+rocDate(shanhuaDay)+'（目前工作日，唯讀）';
  try{
   const storage=safeGetLocalStorage(),raw=storage?.getItem(monitoringDraftKey(shanhuaDay,SHANHUA_ID));
   const form=raw?validateShanhuaForm(JSON.parse(raw)):emptyShanhuaForm(shanhuaDay,JSON.parse(storage?.getItem(SHANHUA_REMEMBER_KEY)||'{}'));
   if(form.day!==shanhuaDay)throw Error('草稿工作日不符，未覆寫');
   for(const input of $('shanhuaForm').querySelectorAll('[data-shanhua-field]')){
    const value=input.dataset.shanhuaField.split('.').reduce((o,k)=>o[k],form);
-   if(input.type==='checkbox')input.checked=value;else input.value=value;
+   if(input.type==='checkbox')input.checked=value;else if(input.type==='radio')input.checked=input.value===value;else input.value=value;
   }
+  shanhuaCarried=[...(form.carried||[])];updateShanhuaPresentation();
+  $('shanhuaResetDraft').hidden=true;
+  for(const input of $('shanhuaForm').querySelectorAll('input,textarea,button'))input.disabled=false;
   shanhuaReady=true;$('shanhuaDay').textContent='監看日期：'+rocDate(shanhuaDay)+'（目前工作日，唯讀）';
   const key=projectKey(MONITORING_FOLDER_KEY,SHANHUA_ID),id=readOptionalSetting(key)||'';
   $('shanhuaFolder').value=id;$('shanhuaFolderPath').value=savedFolderPath(key,id)||(id?'已儲存的資料夾（請重新選擇）':'');
-  $('shanhuaStatus').textContent=raw?'已載入本機草稿':'新草稿；業主、施工單位、地點、小地名、相關遺址與建議沿用上次';
+  $('shanhuaStatus').textContent=raw?'已載入本機草稿':'新草稿；標示「沿用」的欄位來自上次或預設，工程內容請自行填寫';
   refreshShanhuaImages().catch(e=>{$('shanhuaStatus').textContent='圖片載入失敗：'+e.message;});
- }catch(e){$('shanhuaStatus').textContent='草稿載入失敗：'+e.message+'。原草稿保留，未覆寫。';}
+ }catch(e){
+  shanhuaCarried=[];updateShanhuaPresentation();
+  for(const input of $('shanhuaForm').querySelectorAll('input,textarea,button'))input.disabled=true;
+  $('shanhuaStatus').textContent='此日草稿無法讀取，已保留原資料；可按『以新草稿覆寫』重新開始';
+  $('shanhuaResetDraft').hidden=false;$('shanhuaResetDraft').disabled=false;
+ }
 }
-const shanhuaImageKey=kind=>kind==='map'?'map:'+shanhuaDay:'signature:'+kind;
+const shanhuaImageKey=kind=>kind==='map'?'map:current':'signature:'+kind;
 async function refreshShanhuaImages(){
  const generation=++shanhuaGeneration,day=shanhuaDay;
- const images=await Promise.all(['map','monitor','leader'].map(kind=>getShanhuaFile(kind==='map'?'map:'+day:'signature:'+kind)));
+ const images=await Promise.all(['map','monitor','leader'].map(kind=>getShanhuaFile(shanhuaImageKey(kind))));
  if(generation!==shanhuaGeneration||day!==shanhuaDay)return;
  ['map','monitor','leader'].forEach((kind,index)=>{
   const old=shanhuaUrls.get(kind);if(old)URL.revokeObjectURL(old);shanhuaUrls.delete(kind);
   const image=$('shanhuaPreview-'+kind),value=images[index];image.hidden=$('shanhuaRemove-'+kind).hidden=!value;
+  $('shanhuaChoose-'+kind).textContent=value?'更換':'選擇圖片';if(kind==='map')$('shanhuaMapHint').hidden=!value;
   image.removeAttribute('src');if(value){const url=URL.createObjectURL(value.blob);shanhuaUrls.set(kind,url);image.src=url;}
  });
 }
@@ -857,7 +902,7 @@ async function runShanhua(action){
  finally{shanhuaWorking=false;for(const input of $('shanhuaMonitoring').querySelectorAll('button,input,textarea,select'))input.disabled=false;}
 }
 async function prepareShanhuaDoc(){
- const form=saveShanhuaDraft(),[map,monitorSignature,leaderSignature]=await Promise.all([getShanhuaFile('map:'+form.day),getShanhuaFile('signature:monitor'),getShanhuaFile('signature:leader')]);
+ const form=saveShanhuaDraft(),[map,monitorSignature,leaderSignature]=await Promise.all([getShanhuaFile('map:current'),getShanhuaFile('signature:monitor'),getShanhuaFile('signature:leader')]);
  return {blob:await shanhuaDocx(form,{map,monitorSignature,leaderSignature}),name:'監看紀錄表_'+rocDate(form.day)};
 }
 window.addEventListener('beforeunload',e=>{if(shanhuaDirty||shanhuaWorking){e.preventDefault();e.returnValue='';}});
@@ -884,7 +929,7 @@ function renderProjectUI(){
 }
 async function changeProject(id){
  if(id===currentProject)return;
- if(!isNanke())saveShanhuaDraft();
+ if(!isNanke()&&shanhuaReady)saveShanhuaDraft();
  if(shanhuaWorking)throw Error('請先完成善化圖片儲存或輸出');
  if(busy||pending.length||rotating||monitoringWorking||uploadingPhotos||dayTransitioning||exportWorking)throw Error('請先完成照片儲存、旋轉或輸出，再切換專案');
  if(editorDirty())throw Error('記事尚未儲存，請先儲存或關閉編輯再切換專案');
@@ -910,7 +955,7 @@ async function changeProject(id){
 $('project').onchange=()=>run(async()=>{try{await changeProject($('project').value);}finally{$('project').value=currentProject;}});
 async function changeDay(day){
   if(!validDay(day))throw Error('日期請使用有效 YYYY-MM-DD');
-  if(!isNanke())saveShanhuaDraft();
+  if(!isNanke()&&shanhuaReady)saveShanhuaDraft();
   if(shanhuaWorking)throw Error('請先完成善化圖片儲存或輸出');
   if(busy||pending.length||rotating)throw Error('請先完成照片儲存或旋轉再切換工作日');
   if(!canDiscardEditor()){$('workDay').value=activeDay;return;}
