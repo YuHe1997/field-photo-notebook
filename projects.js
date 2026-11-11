@@ -2,7 +2,8 @@ import {validDay,workDayOf} from './core.js';
 export const DEFAULT_PROJECT='nanke-chiayi-2';
 export const PROJECTS=Object.freeze([
  Object.freeze({id:DEFAULT_PROJECT,name:'南部科學園區嘉義園區二期考古遺址監看計畫',shortName:'南科嘉義二期',areaReference:true,monitoringFormat:'nanke'}),
- Object.freeze({id:'shanhua-1350pscp',name:'臺南市善化區光復路至文昌路1350PSCP汰換管線工程施工監看計畫',shortName:'善化 1350PSCP 汰換管線',areaReference:false,monitoringFormat:'shanhua'})
+ Object.freeze({id:'shanhua-1350pscp',name:'臺南市善化區光復路至文昌路1350PSCP汰換管線工程施工監看計畫',shortName:'善化 1350PSCP 汰換管線',areaReference:false,monitoringFormat:'shanhua'}),
+ Object.freeze({id:'nuke1-monitoring',name:'核能一廠三號低放射性廢棄物貯存庫暨土石方暫置場興建工程',shortName:'核一監看案',areaReference:false,monitoringFormat:'nuke1'})
 ]);
 // Unknown identifiers fail closed to the legacy project, never to Shanhua.
 export const projectOf=record=>PROJECTS.some(p=>p.id===record?.projectId)?record.projectId:DEFAULT_PROJECT;

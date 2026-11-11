@@ -574,7 +574,7 @@ article {
   font-weight: 750;
   letter-spacing: 0;
 }
-.step-card, #unifiedExport > section, #shanhuaMonitoring > #photoDriveExport {
+.step-card, #unifiedExport > section, #shanhuaMonitoring > #photoDriveExport, #nuke1Monitoring > #photoDriveExport {
   padding: 16px;
   margin: 12px 0 18px;
   border: 1px solid var(--line);
@@ -582,16 +582,16 @@ article {
   background: var(--surface);
   box-shadow: var(--shadow-1);
 }
-.step-card h3, #unifiedExport > section h3, #shanhuaMonitoring > #photoDriveExport h3 { margin-top: 0; }
+.step-card h3, #unifiedExport > section h3, #shanhuaMonitoring > #photoDriveExport h3, #nuke1Monitoring > #photoDriveExport h3 { margin-top: 0; }
 .monitoring-template { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
 .monitoring-template > button { width: 100%; margin: 0; }
 .monitoring-template > button:nth-child(n+3) { grid-column: 1 / -1; }
 #masterSelectionStatus, #fillDisabledReason { margin: 8px 0; }
 
-#monForm fieldset, #shanhuaForm fieldset { min-width: 0; margin: 14px 0 20px; padding: 18px 16px 8px; border: 1px solid var(--line); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-1); }
-#monForm legend, #shanhuaForm legend { padding: 4px 12px; font-size: 13px; font-weight: 700; letter-spacing: .06em; color: var(--brand); background: var(--brand-soft); border-radius: 999px; }
-#monForm label, #shanhuaForm label { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
-#monForm input[type=text], #monForm textarea, #shanhuaForm input[type=text], #shanhuaForm input[type=date], #shanhuaForm textarea { font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface); }
+#monForm fieldset, #shanhuaForm fieldset, #nuke1Form fieldset { min-width: 0; margin: 14px 0 20px; padding: 18px 16px 8px; border: 1px solid var(--line); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-1); }
+#monForm legend, #shanhuaForm legend, #nuke1Form legend { padding: 4px 12px; font-size: 13px; font-weight: 700; letter-spacing: .06em; color: var(--brand); background: var(--brand-soft); border-radius: 999px; }
+#monForm label, #shanhuaForm label, #nuke1Form label { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
+#monForm input[type=text], #monForm textarea, #shanhuaForm input[type=text], #shanhuaForm input[type=date], #shanhuaForm textarea, #nuke1Form input[type=text], #nuke1Form textarea { font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface); }
 .mon-helper-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 8px; }
 .mon-helper-buttons button { font-size: 15px; min-height: 44px; padding: 8px 12px; }
 
@@ -626,9 +626,9 @@ body.keyboard-open header nav { display: none; }
 #photoDriveExport > button:first-of-type { margin-bottom: 4px; }
 .daily-folder-option { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-size: 15.5px; line-height: 1.5; }
 #photoDrivePath, #monitoringDrivePath { text-overflow: ellipsis; }
-#monitoringOtherExport, #shanhuaOtherExport { margin-top: 24px; padding: 0 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-l); }
-#monitoringOtherExport summary, #shanhuaOtherExport summary { font-weight: 700; padding: 14px 0; }
-#monitoringOtherExport .actions, #shanhuaOtherExport .actions { gap: 8px; }
+#monitoringOtherExport, #shanhuaOtherExport, #nuke1OtherExport { margin-top: 24px; padding: 0 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-l); }
+#monitoringOtherExport summary, #shanhuaOtherExport summary, #nuke1OtherExport summary { font-weight: 700; padding: 14px 0; }
+#monitoringOtherExport .actions, #shanhuaOtherExport .actions, #nuke1OtherExport .actions { gap: 8px; }
 #masterBuild { font-size: 12px; color: var(--ink-muted); }
 
 /* 一般資訊提示 */
@@ -734,8 +734,8 @@ body.keyboard-open header nav { display: none; }
   header, main, footer { padding-left: 14px; padding-right: 14px; }
   #status { width: calc(100% - 28px); }
   #groupList > article { padding: 14px 12px 12px 18px; }
-  .step-card, #unifiedExport > section, #shanhuaMonitoring > #photoDriveExport { padding: 14px; }
-  #monForm fieldset, #shanhuaForm fieldset { padding: 16px 12px 6px; }
+  .step-card, #unifiedExport > section, #shanhuaMonitoring > #photoDriveExport, #nuke1Monitoring > #photoDriveExport { padding: 14px; }
+  #monForm fieldset, #shanhuaForm fieldset, #nuke1Form fieldset { padding: 16px 12px 6px; }
   .monitoring-template button { padding: 8px; }
   .coordinate-album-header { flex-wrap: wrap; }
   .today-card { padding: 12px; }
@@ -807,5 +807,17 @@ body.keyboard-open header nav { display: none; }
 #shanhuaMonitoring .shanhua-image button { margin: 0 6px 6px 0; }
 #shanhuaMonitoring .shanhua-file-input { position: absolute; width: 1px !important; height: 1px; min-height: 0; padding: 0; border: 0; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
 #shanhuaMonitoring #shanhuaStatus { white-space: pre-wrap; }
+#nuke1Monitoring [hidden] { display: none !important; }
+#nuke1Form { min-width: 0; overflow-wrap: anywhere; }
+#nuke1Form legend { max-width: 100%; }
+#nuke1Form input, #nuke1Form textarea { width: 100%; min-width: 0; max-width: 100%; }
+.nuke1-prev { margin: -6px 0 18px; padding: 0 10px 10px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface-2); }
+.nuke1-prev summary { font-size: 14px; }
+.nuke1-prev-value { white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 10px; }
+.nuke1-image { margin-block: 16px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-s); }
+.nuke1-image img { display: block; max-width: 100%; max-height: 200px; object-fit: contain; margin-block: 12px; }
+.nuke1-image button { margin: 0 6px 6px 0; }
+#nuke1Form .nuke1-file-input { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+#nuke1Status { white-space: pre-wrap; }
 #shanhuaMonitoring #shanhuaCloud { margin-top: 12px; }
 #shanhuaMonitoring #shanhuaCloud button { margin: 0 4px 8px 0; }

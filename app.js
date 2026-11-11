@@ -1,4 +1,6 @@
 import * as db from './db.js';
+import {NUKE1_ID,NUKE1_PROJECT_NAME,NUKE1_REMARK,NUKE1_FIELDS,NUKE1_LABELS,emptyNuke1Form,validateNuke1Form,previousNuke1Value,nuke1Date,appendCoordinates} from './nuke1-form.js';
+import {getNuke1File,saveNuke1File,removeNuke1File} from './nuke1-store.js';
 import {emptyShanhuaForm,fillShanhuaFixedDefaults,validateShanhuaForm,rocDate,SHANHUA_PROJECT_NAME,SHANHUA_CARRY_FIELDS,previousWorkContent,previousShanhuaForm} from './shanhua-form.js';
 import {shanhuaDocx} from './shanhua-docx.js';
 import {getShanhuaFile,saveShanhuaFile,removeShanhuaFile} from './shanhua-store.js';
@@ -6,6 +8,8 @@ import {PROJECTS,DEFAULT_PROJECT,projectOf,projectInfo,projectKey,daysKey,monito
 const PROJECT_KEY='field-photo-notebook-project';
 let currentProject=(()=>{try{return projectOf({projectId:safeGetLocalStorage()?.getItem(PROJECT_KEY)});}catch{return DEFAULT_PROJECT;}})();
 const isNanke=()=>currentProject===DEFAULT_PROJECT;
+const isShanhua=()=>currentProject==='shanhua-1350pscp';
+const isNuke1=()=>currentProject===NUKE1_ID;
 const projectSnapshot=s=>({...s,photos:s.photos.filter(p=>projectOf(p)===currentProject),groups:s.groups.filter(g=>projectOf(g)===currentProject)});
 import {compareGroups} from './ordering.js';
 import * as docsAppendInfo from './docs-append.js';
@@ -937,7 +941,7 @@ async function refreshShanhuaImages(){
  });
 }
 async function runShanhua(action){
- if(shanhuaWorking||isNanke()||!shanhuaReady)return;
+ if(shanhuaWorking||!isShanhua()||!shanhuaReady)return;
  shanhuaWorking=true;for(const input of shanhuaControls())input.disabled=true;
  try{await action();}catch(e){$('shanhuaStatus').textContent='未完成：'+e.message;}
  finally{shanhuaWorking=false;for(const input of shanhuaControls())input.disabled=!shanhuaReady;updateShanhuaPrevious();}
@@ -947,12 +951,85 @@ async function prepareShanhuaDoc(){
  return {blob:await shanhuaDocx(form,{map,monitorSignature,leaderSignature}),name:'監看紀錄表_'+rocDate(form.day)};
 }
 window.addEventListener('beforeunload',e=>{if(shanhuaDirty||shanhuaWorking){e.preventDefault();e.returnValue='';}});
+let nuke1Day=null,nuke1Ready=false,nuke1Working=false,nuke1Dirty=false,nuke1Generation=0;
+const nuke1Urls=new Map();
+function buildNuke1UI(){
+ const box=text('div','');box.id='nuke1Monitoring';box.append(text('h2','核一監看日誌'));
+ function card(number,title){const section=text('section','');section.className='step-card';const heading=text('h3',''),no=text('span',number);no.className='step-no';heading.append(no,document.createTextNode('　'+title));section.append(heading);box.append(section);return section;}
+ const prep=card('01','母表準備');prep.append(text('p','直接插入 Google 文件母表將在下一版提供；目前先在本機填寫，草稿自動保存。'));
+ const today=card('02','填寫今日紀錄'),form=document.createElement('form');form.id='nuke1Form';form.onsubmit=e=>e.preventDefault();today.append(form);
+ function group(title){const set=document.createElement('fieldset');set.append(text('legend',title));form.append(set);return set;}
+ function readonly(parent,id,label,value=''){const wrap=text('label',label),input=document.createElement('input');input.type='text';input.id=id;input.readOnly=true;input.value=value;wrap.append(input);parent.append(wrap);}
+ const basics=group('基本資料');readonly(basics,'nuke1Day','監看日期');readonly(basics,'nuke1ProjectName','1.工程名稱',NUKE1_PROJECT_NAME);
+ const observations=group('現地觀察與作業狀況');
+ for(const key of NUKE1_FIELDS){
+  const parent=['contractor','location','site'].includes(key)?basics:observations,wrap=text('label',NUKE1_LABELS[key]),input=document.createElement('textarea');input.rows=key==='advice'?8:3;input.id='nuke1-'+key;input.dataset.nuke1Field=key;wrap.append(input);parent.append(wrap);
+  if(key==='location'){
+   const add=text('button','加入照片座標');add.id='nuke1AddCoordinates';add.type='button';parent.append(add);
+   add.onclick=()=>runNuke1(async()=>{const latest=dayPhotos().filter(p=>projectOf(p)===NUKE1_ID&&compactCoordinates(p.location)!=='座標未取得').sort((a,b)=>photoTime(b)-photoTime(a))[0];if(!latest){$('nuke1Status').textContent='今天沒有含座標的照片';return;}input.value=appendCoordinates(input.value,latest.location);nuke1Dirty=true;saveNuke1Draft();});
+  }
+  const prev=document.createElement('details');prev.className='nuke1-prev';prev.dataset.nuke1Prev=key;const preview=text('div',''),apply=text('button','帶入');preview.className='nuke1-prev-value';apply.type='button';apply.dataset.nuke1Apply=key;
+  prev.append(text('summary','沒有前筆紀錄'),preview,apply);parent.append(prev);
+  apply.onclick=()=>runNuke1(async()=>{const found=previousNuke1Value(nuke1Day,readNuke1Drafts(),key);if(!found)return;if(input.value.trim()&&input.value!==found.value&&!confirm('此欄已有文字，要以 '+nuke1Date(found.day)+' 的前筆紀錄覆寫？'))return;input.value=found.value;nuke1Dirty=true;saveNuke1Draft();});
+ }
+ form.append(text('p','15.備註：'+NUKE1_REMARK));
+ const signatures=group('簽名（上傳一次，之後沿用）');signatures.id='nuke1Signatures';
+ for(const [kind,label] of [['monitor','監看人員簽署'],['leader','計畫負責人簽署']]){
+  const section=text('div','');section.className='nuke1-image';const input=document.createElement('input');input.type='file';input.accept='image/*';input.id='nuke1Image-'+kind;input.className='nuke1-file-input';const caption=text('label',label);caption.htmlFor=input.id;
+  const choose=text('button','選擇圖片');choose.type='button';choose.id='nuke1Choose-'+kind;choose.onclick=()=>input.click();
+  const remove=text('button','移除'+label);remove.type='button';remove.id='nuke1Remove-'+kind;remove.hidden=true;
+  const image=document.createElement('img');image.id='nuke1Preview-'+kind;image.alt=label;image.hidden=true;
+  input.onchange=()=>runNuke1(async()=>{const file=input.files[0];if(!file)return;await saveNuke1File('signature:'+kind,file);await refreshNuke1Images();input.value='';$('nuke1Status').textContent=label+'已儲存於本機';});
+  remove.onclick=()=>runNuke1(async()=>{await removeNuke1File('signature:'+kind);await refreshNuke1Images();$('nuke1Status').textContent=label+'已移除';});
+  section.append(caption,input,choose,remove,image);signatures.append(section);
+ }
+ signatures.append(text('p','簽名只存在本機、不在 TAR 備份內。草稿文字也只存在本機，不在 TAR 備份內。'));
+ form.addEventListener('input',e=>{if(!nuke1Ready||!e.target.dataset.nuke1Field)return;nuke1Dirty=true;try{saveNuke1Draft();}catch(error){$('nuke1Status').textContent='草稿未儲存：'+error.message;}});
+ const status=text('p','');status.id='nuke1Status';status.setAttribute('role','status');const reset=text('button','以新草稿覆寫');reset.id='nuke1ResetDraft';reset.type='button';reset.hidden=true;
+ reset.onclick=()=>{if(!isNuke1()||!confirm('確定以新草稿覆寫此日無法讀取的草稿？原草稿將被取代。'))return;try{const storage=safeGetLocalStorage();if(!storage)throw Error('本機儲存空間無法使用');storage.setItem(monitoringDraftKey(nuke1Day,NUKE1_ID),JSON.stringify(emptyNuke1Form(nuke1Day)));nuke1Day=null;hydrateNuke1UI();}catch(error){status.textContent='未完成：'+error.message;}};
+ today.append(status,reset);card('03','輸出今日紀錄表').append(text('p','Word 與插入母表將在下一版提供'));
+ const other=document.createElement('details');other.id='nuke1OtherExport';other.append(text('summary','Word / TAR 進階備份'));const tools=text('div','');tools.className='actions';other.append(tools);box.append(other);return box;
+}
+function readNuke1Drafts(){
+ const storage=safeGetLocalStorage(),drafts={},prefix=monitoringDraftKey('',NUKE1_ID);
+ if(storage)for(let i=0;i<storage.length;i++){const key=storage.key(i);if(key?.startsWith(prefix))try{drafts[key.slice(prefix.length)]=JSON.parse(storage.getItem(key));}catch{ /* Preserve unreadable data. */ }}return drafts;
+}
+function nuke1Controls(){return $('nuke1Form').querySelectorAll('input,textarea,button');}
+function updateNuke1Previous(){
+ const drafts=readNuke1Drafts();for(const prev of $('nuke1Form').querySelectorAll('[data-nuke1-prev]')){const found=previousNuke1Value(nuke1Day,drafts,prev.dataset.nuke1Prev);prev.querySelector('summary').textContent=found?'參考前筆（'+nuke1Date(found.day)+'）':'沒有前筆紀錄';prev.querySelector('.nuke1-prev-value').textContent=found?.value||'';prev.querySelector('button').disabled=!nuke1Ready||nuke1Working||!found;}
+}
+function saveNuke1Draft(){
+ if(!isNuke1()||!nuke1Ready||!nuke1Day)throw Error('核一草稿尚未載入，未改寫資料');
+ const storage=safeGetLocalStorage();if(!storage)throw Error('本機儲存空間無法使用');const form=emptyNuke1Form(nuke1Day);for(const key of NUKE1_FIELDS)form[key]=$('nuke1-'+key).value;
+ storage.setItem(monitoringDraftKey(nuke1Day,NUKE1_ID),JSON.stringify(validateNuke1Form(form)));nuke1Dirty=false;updateNuke1Previous();$('nuke1Status').textContent='草稿已自動儲存於本機';
+}
+function hydrateNuke1UI(){
+ if(!validDay(activeDay)||nuke1Day===activeDay)return;nuke1Day=activeDay;nuke1Ready=false;nuke1Dirty=false;$('nuke1Day').value=nuke1Date(nuke1Day);
+ try{
+  const storage=safeGetLocalStorage();if(!storage)throw Error('本機儲存空間無法使用');const raw=storage.getItem(monitoringDraftKey(nuke1Day,NUKE1_ID)),form=raw===null?emptyNuke1Form(nuke1Day):validateNuke1Form(JSON.parse(raw));
+  if(form.day!==nuke1Day)throw Error('草稿工作日不符');for(const key of NUKE1_FIELDS)$('nuke1-'+key).value=form[key];
+  nuke1Ready=true;for(const input of nuke1Controls())input.disabled=false;$('nuke1ResetDraft').hidden=true;$('nuke1Status').textContent=raw===null?'新草稿；輸入即自動保存於本機':'已載入本機草稿';
+  refreshNuke1Images().catch(error=>{$('nuke1Status').textContent='簽名載入失敗：'+error.message;});
+ }catch{
+  for(const key of NUKE1_FIELDS)$('nuke1-'+key).value='';for(const input of nuke1Controls())input.disabled=true;$('nuke1ResetDraft').hidden=false;$('nuke1Status').textContent='此日草稿無法讀取，已保留原資料；可按『以新草稿覆寫』重新開始';
+ }
+ updateNuke1Previous();
+}
+async function refreshNuke1Images(){
+ const generation=++nuke1Generation,day=nuke1Day,images=await Promise.all(['monitor','leader'].map(kind=>getNuke1File('signature:'+kind)));if(generation!==nuke1Generation||day!==nuke1Day)return;
+ ['monitor','leader'].forEach((kind,i)=>{const old=nuke1Urls.get(kind);if(old)URL.revokeObjectURL(old);nuke1Urls.delete(kind);const image=$('nuke1Preview-'+kind),value=images[i];image.hidden=$('nuke1Remove-'+kind).hidden=!value;$('nuke1Choose-'+kind).textContent=value?'更換':'選擇圖片';image.removeAttribute('src');if(value){const url=URL.createObjectURL(value.blob);nuke1Urls.set(kind,url);image.src=url;}});
+}
+async function runNuke1(action){
+ if(!isNuke1()||!nuke1Ready||nuke1Working)return;nuke1Working=true;for(const input of nuke1Controls())input.disabled=true;
+ try{await action();}catch(error){$('nuke1Status').textContent='未完成：'+error.message;}finally{nuke1Working=false;for(const input of nuke1Controls())input.disabled=!nuke1Ready;updateNuke1Previous();}
+}
+window.addEventListener('beforeunload',e=>{if(nuke1Dirty||nuke1Working){e.preventDefault();e.returnValue='';}});
 let projectUIReady=false,sharedToolSlots=[],nankeAlsoDoc=true;
 function renderProjectUI(){
  if(!projectUIReady){
   projectUIReady=true;nankeAlsoDoc=$('photoAlsoDoc').checked;
   for(const p of PROJECTS){const option=text('option',p.shortName);option.value=p.id;option.title=p.name;$('project').append(option);}
-  const wrapper=document.createElement('div');wrapper.id='nankeMonitoring';wrapper.append(...$('monitoring').childNodes);$('monitoring').append(wrapper,buildShanhuaUI());
+  const wrapper=document.createElement('div');wrapper.id='nankeMonitoring';wrapper.append(...$('monitoring').childNodes);$('monitoring').append(wrapper,buildShanhuaUI(),buildNuke1UI());
   const shared=[...['exportWord','backup','persist','storage','photoDriveExport'].map($),$('restore').parentElement];
   sharedToolSlots=shared.map(node=>{const slot=document.createComment('shared project photo tool');node.before(slot);return {node,slot};});
   // Defense in depth: hidden Nanke controls must not dispatch for Shanhua.
@@ -960,20 +1037,23 @@ function renderProjectUI(){
  }
  $('project').value=currentProject;$('projectName').textContent=projectInfo(currentProject).name;
  $('areaDatasetNote').hidden=!projectInfo(currentProject).areaReference;
- $('nankeMonitoring').hidden=!isNanke();$('shanhuaMonitoring').hidden=isNanke();
- if(!isNanke())hydrateShanhuaUI();
+ $('nankeMonitoring').hidden=!isNanke();$('shanhuaMonitoring').hidden=!isShanhua();$('nuke1Monitoring').hidden=!isNuke1();
+ if(isShanhua())hydrateShanhuaUI();
+ if(isNuke1())hydrateNuke1UI();
  $('scopePhrasePanel').hidden=!isNanke();
  for(const {node,slot} of sharedToolSlots){
   if(isNanke())slot.after(node);
-  else if(node.id==='photoDriveExport')$('shanhuaOtherExport').before(node);
-  else $('shanhuaOtherExport').querySelector('.actions').append(node);
+  else if(node.id==='photoDriveExport')$(isShanhua()?'shanhuaOtherExport':'nuke1OtherExport').before(node);
+  else $(isShanhua()?'shanhuaOtherExport':'nuke1OtherExport').querySelector('.actions').append(node);
  }
  $('photoAlsoDoc').parentElement.hidden=!isNanke();
  if(!isNanke())$('photoAlsoDoc').checked=false;
 }
 async function changeProject(id){
  if(id===currentProject)return;
- if(!isNanke()&&shanhuaReady)saveShanhuaDraft();
+ if(isShanhua()&&shanhuaReady)saveShanhuaDraft();
+ if(isNuke1()&&nuke1Ready)saveNuke1Draft();
+ if(nuke1Working)throw Error('請先完成核一簽名儲存');
  if(shanhuaWorking)throw Error('請先完成善化圖片儲存或輸出');
  if(busy||pending.length||rotating||monitoringWorking||uploadingPhotos||dayTransitioning||exportWorking)throw Error('請先完成照片儲存、旋轉或輸出，再切換專案');
  if(editorDirty())throw Error('記事尚未儲存，請先儲存或關閉編輯再切換專案');
@@ -999,7 +1079,9 @@ async function changeProject(id){
 $('project').onchange=()=>run(async()=>{try{await changeProject($('project').value);}finally{$('project').value=currentProject;}});
 async function changeDay(day){
   if(!validDay(day))throw Error('日期請使用有效 YYYY-MM-DD');
-  if(!isNanke()&&shanhuaReady)saveShanhuaDraft();
+  if(isShanhua()&&shanhuaReady)saveShanhuaDraft();
+  if(isNuke1()&&nuke1Ready)saveNuke1Draft();
+  if(nuke1Working)throw Error('請先完成核一簽名儲存');
   if(shanhuaWorking)throw Error('請先完成善化圖片儲存或輸出');
   if(busy||pending.length||rotating)throw Error('請先完成照片儲存或旋轉再切換工作日');
   if(!canDiscardEditor()){$('workDay').value=activeDay;return;}
@@ -1343,7 +1425,7 @@ photoPhrasePicker=new WorkPhrasePicker({
 });
 scopePhrasePicker=new WorkPhrasePicker({
  ...phrasePickerElements('scope','scopePhrasePanel','engineering'),getContext:()=>phraseContext('engineering'),
- loadSource:async c=>{if(!isNanke())return {choices:[],emptyMessage:'善化監看紀錄表將在下一版提供'};if(monDraftManager.hasUnsaved(c.day)||monDraftManager.hasCorrupt(c.day)||monDraftManager.hasConflict(c.day)||monDraftManager.isReadBlocked(c.day))throw Error('本工作日監看草稿尚未安全儲存，請先重試儲存或匯出備份；不使用舊草稿冒充最新內容');return {...readSavedScopePhrases(safeGetLocalStorage(),c.day),emptyMessage:'本工作日尚無作業子項目片語' };},
+ loadSource:async c=>{if(!isNanke())return {choices:[],emptyMessage:'此專案的監看作業項目片語尚未提供'};if(monDraftManager.hasUnsaved(c.day)||monDraftManager.hasCorrupt(c.day)||monDraftManager.hasConflict(c.day)||monDraftManager.isReadBlocked(c.day))throw Error('本工作日監看草稿尚未安全儲存，請先重試儲存或匯出備份；不使用舊草稿冒充最新內容');return {...readSavedScopePhrases(safeGetLocalStorage(),c.day),emptyMessage:'本工作日尚無作業子項目片語' };},
  apply:(p,b)=>applyWorkPhrase($('engineering'),p,b,false),restore:x=>restoreWorkPhrase($('engineering'),x,false),
  successMessage:()=>({text:'已插入，請按「儲存紀錄集」。',quiet:true})
 });
@@ -1437,7 +1519,7 @@ $('restoreMonTemplate').onclick=()=>{
 };
 // The offline download and Drive export use the same committed snapshot preparation.
 async function prepareMonitoringDay({day=displayedDay(),formData=readMonInputs()}={}){
- if(!isNanke())throw Error('善化監看紀錄表將在下一版提供');
+ if(!isNanke())throw Error(isShanhua()?'善化監看紀錄表將在下一版提供':'核一監看紀錄表將在下一版提供');
  const snapshot=projectSnapshot(await db.snapshot()),byId=new Map(snapshot.photos.map(p=>[p.id,p]));
  const included=snapshot.groups.filter(g=>g.workDay===day||g.photoIds.some(id=>byId.has(id)&&workDayOf(byId.get(id))===day)).sort(compareGroups);
  const prepared=included.length?await preparePhotoGroups(snapshot,included.map(g=>g.id)):[];
