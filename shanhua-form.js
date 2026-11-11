@@ -12,6 +12,12 @@ export const SHANHUA_DEFAULTS=Object.freeze({
  suggestion:'建議持續監看，監看過程中如發現任何涉文化資產標的，將依《文化資產保存法》第33條、第57條、第77條、第88條規定辦理。若有發現疑似考古遺址文化資產時，將即通報主管機關依照「文化資產保存法施行細則第27條及27之1條」辦理。',
  report:'無。',mapCaption:'善美大道339號'
 });
+export const SHANHUA_FIXED_FIELDS=Object.freeze(['owner','contractor','location','placeName','site']);
+export function fillShanhuaFixedDefaults(form){
+ const filled=structuredClone(form);
+ for(const key of SHANHUA_FIXED_FIELDS)if(typeof filled[key]!=='string'||!filled[key].trim())filled[key]=SHANHUA_DEFAULTS[key];
+ return filled;
+}
 export function rocDate(day){
  if(typeof day!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(day))throw Error('日期格式無效');
  const d=new Date(day+'T00:00:00Z');
@@ -29,7 +35,7 @@ export function emptyShanhuaForm(day,remembered={}){
   }else if(typeof value===typeof fallback)form[key]=value;
  }
  form.carried=[...SHANHUA_CARRY_FIELDS,'report'];
- form.day=day;form.docDate=localDay();return validateShanhuaForm(form);
+ form.day=day;form.docDate=localDay();return fillShanhuaFixedDefaults(validateShanhuaForm(form));
 }
 export function validateShanhuaForm(form){
  const fail=()=>{throw Error('善化表單資料格式無效');};

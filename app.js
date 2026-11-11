@@ -1,5 +1,5 @@
 import * as db from './db.js';
-import {emptyShanhuaForm,validateShanhuaForm,rocDate,SHANHUA_PROJECT_NAME,SHANHUA_CARRY_FIELDS,previousWorkContent,previousShanhuaForm} from './shanhua-form.js';
+import {emptyShanhuaForm,fillShanhuaFixedDefaults,validateShanhuaForm,rocDate,SHANHUA_PROJECT_NAME,SHANHUA_CARRY_FIELDS,previousWorkContent,previousShanhuaForm} from './shanhua-form.js';
 import {shanhuaDocx} from './shanhua-docx.js';
 import {getShanhuaFile,saveShanhuaFile,removeShanhuaFile} from './shanhua-store.js';
 import {PROJECTS,DEFAULT_PROJECT,projectOf,projectInfo,projectKey,daysKey,monitoringDraftKey,backupRecord,restoreProjectRecords,numberIdentity} from './projects.js';
@@ -782,7 +782,7 @@ function buildShanhuaUI(){
   const found=previousShanhuaForm(shanhuaDay,readShanhuaDrafts());if(!found)return;
   const current=readShanhuaInputs(),complete=[...SHANHUA_CARRY_FIELDS,'report'];
   if((current.workContent||complete.some(key=>!current.carried.includes(key)))&&!confirm('今日紀錄已有修改，要套用 '+rocDate(found.day)+' 的紀錄表？'))return;
-  const next={...found.form,day:current.day,docDate:current.docDate,carried:complete};
+  const next=fillShanhuaFixedDefaults({...found.form,day:current.day,docDate:current.docDate,carried:complete});
   fillShanhuaInputs(next);shanhuaCarried=[...complete];updateShanhuaPresentation();saveShanhuaDraft();
  });
  reference.append(previousStatus,view,apply);
@@ -895,7 +895,8 @@ function saveShanhuaDraft(){
  if(!shanhuaDay)return;
  const form=readShanhuaInputs(),storage=safeGetLocalStorage();if(!storage)throw Error('本機儲存空間無法使用');
  storage.setItem(monitoringDraftKey(shanhuaDay,SHANHUA_ID),JSON.stringify(form));
- storage.setItem(SHANHUA_REMEMBER_KEY,JSON.stringify(Object.fromEntries(shanhuaRememberFields.map(key=>[key,form[key]]))));
+ const remembered=fillShanhuaFixedDefaults(form);
+ storage.setItem(SHANHUA_REMEMBER_KEY,JSON.stringify(Object.fromEntries(shanhuaRememberFields.map(key=>[key,remembered[key]]))));
  shanhuaDirty=false;$('shanhuaStatus').textContent='草稿已自動儲存於本機';return form;
 }
 function hydrateShanhuaUI(){
@@ -904,7 +905,7 @@ function hydrateShanhuaUI(){
  $('shanhuaDay').value=rocDate(shanhuaDay);
  try{
   const storage=safeGetLocalStorage(),raw=storage?.getItem(monitoringDraftKey(shanhuaDay,SHANHUA_ID));
-  const form=raw?validateShanhuaForm(JSON.parse(raw)):emptyShanhuaForm(shanhuaDay,JSON.parse(storage?.getItem(SHANHUA_REMEMBER_KEY)||'{}'));
+  const form=raw?fillShanhuaFixedDefaults(validateShanhuaForm(JSON.parse(raw))):emptyShanhuaForm(shanhuaDay,JSON.parse(storage?.getItem(SHANHUA_REMEMBER_KEY)||'{}'));
   if(form.day!==shanhuaDay)throw Error('草稿工作日不符，未覆寫');
   fillShanhuaInputs(form);
   shanhuaCarried=[...(form.carried||[])];updateShanhuaPresentation();

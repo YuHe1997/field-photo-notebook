@@ -591,7 +591,7 @@ article {
 #monForm fieldset, #shanhuaForm fieldset { min-width: 0; margin: 14px 0 20px; padding: 18px 16px 8px; border: 1px solid var(--line); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-1); }
 #monForm legend, #shanhuaForm legend { padding: 4px 12px; font-size: 13px; font-weight: 700; letter-spacing: .06em; color: var(--brand); background: var(--brand-soft); border-radius: 999px; }
 #monForm label, #shanhuaForm label { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
-#monForm input[type=text], #monForm textarea, #shanhuaForm input[type=text], #shanhuaForm textarea { font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface); }
+#monForm input[type=text], #monForm textarea, #shanhuaForm input[type=text], #shanhuaForm input[type=date], #shanhuaForm textarea { font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface); }
 .mon-helper-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 8px; }
 .mon-helper-buttons button { font-size: 15px; min-height: 44px; padding: 8px 12px; }
 
@@ -786,6 +786,8 @@ body.keyboard-open header nav { display: none; }
 
 /* Shanhua-only controls; fieldsets, labels and actions share the Nanke system. */
 #shanhuaMonitoring [hidden] { display: none !important; }
+#shanhuaForm input[type=date] { display: block; box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; -webkit-appearance: none; appearance: none; text-align: left; }
+#shanhuaForm input[type=date]::-webkit-date-and-time-value { text-align: left; }
 #shanhuaForm { min-width: 0; overflow-wrap: anywhere; }
 #shanhuaForm fieldset fieldset { padding: 8px 0; margin: 8px 0; border: 0; border-radius: 0; box-shadow: none; }
 #shanhuaForm fieldset fieldset legend { background: transparent; padding-inline: 0; }
