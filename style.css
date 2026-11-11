@@ -54,10 +54,10 @@ body.camera-overlay-active{overflow:hidden}
 .camera-details p{font-size:.85rem;line-height:1.5}
 .camera-sensor-readings{color:#b8c7be}
 #exportDialog{box-sizing:border-box;width:calc(100% - 24px);max-width:780px;max-height:90vh;overflow:auto;padding:16px;border:1px solid #69877c;border-radius:12px;background:#f4f3ed;color:#19332f}
-#monForm fieldset{border:1px solid #95a89e;border-radius:8px;padding:12px;margin-bottom:16px;background:#fff}
-#monForm legend{font-weight:bold;color:#164c43;padding:0 6px}
-#monForm label{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;font-size:0.95rem}
-#monForm input[type=text],#monForm textarea{box-sizing:border-box;width:100%;border:1px solid #7c9488;border-radius:6px;padding:8px;font-size:1rem;background:#fafaf8}
+#monForm fieldset,#shanhuaForm fieldset{border:1px solid #95a89e;border-radius:8px;padding:12px;margin-bottom:16px;background:#fff}
+#monForm legend,#shanhuaForm legend{font-weight:bold;color:#164c43;padding:0 6px}
+#monForm label,#shanhuaForm label{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;font-size:0.95rem}
+#monForm input[type=text],#monForm textarea,#shanhuaForm input[type=text],#shanhuaForm textarea{box-sizing:border-box;width:100%;border:1px solid #7c9488;border-radius:6px;padding:8px;font-size:1rem;background:#fafaf8}
 #monStatus{font-weight:bold;color:#164c43;margin-top:8px}.mon-helper-buttons{display:flex;gap:8px;margin:6px 0;flex-wrap:wrap}.mon-helper-buttons button{min-height:42px;padding:6px 12px;font-size:0.9rem;border-radius:6px}.sync-notice{background:#fff3cd;border:1px solid #ffeeba;color:#856404;padding:8px 12px;border-radius:6px;margin:8px 0;font-size:0.9rem;line-height:1.4}#exportDialog::backdrop{background:#142c2aa8}.export-topbar{display:flex;align-items:center;justify-content:space-between;gap:8px;position:sticky;top:-16px;z-index:2;background:#f4f3ed;border-bottom:1px solid #b8c7be;padding:6px 0}.export-topbar h2{font-size:1.15rem;margin:0}.export-topbar button{flex-shrink:0}#exportRows{padding-left:24px}#exportRows li{border-bottom:1px solid #b8c7be;padding:10px 0;overflow-wrap:anywhere}#exportRows label{display:flex;align-items:center;gap:8px;margin:0;min-height:46px}#exportRows input[type=checkbox]{display:inline-block;width:24px;height:24px;flex-shrink:0;padding:0}#exportRows p{font-size:.9rem;white-space:pre-wrap;margin:4px 0}.docx-preview-table{width:100%;table-layout:fixed;border-collapse:collapse;background:white}.docx-preview-table td{width:50%;border:1px solid #555;padding:4px;vertical-align:middle;overflow-wrap:anywhere}.docx-preview-table img,.empty-export-photo{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:white}.docx-preview-table p{margin:0;min-height:1.4em;line-height:1.4;font-size:.9rem}#exportStatus{color:#793b10}
 /* User's simplified layout: normal document flow, not large drag translations. */
 header>h1{margin-bottom:8px}#tutorial{margin-bottom:12px}main>section>h2{margin-top:8px}
@@ -106,9 +106,9 @@ a:not(.camera-overlay *){color:var(--ui-accent-ink)}
 article{background:var(--ui-surface);border-color:var(--ui-line);border-radius:8px}
 .work-days select{background:var(--ui-surface);color:var(--ui-ink);border-color:var(--ui-control)}
 input[readonly],#photoDrivePath,#monitoringDrivePath{background:var(--ui-soft);color:var(--ui-muted);border-color:var(--ui-control)}
-#monForm fieldset{background:var(--ui-surface);border-color:var(--ui-line)}
-#monForm legend,#monStatus{color:var(--ui-accent-ink)}
-#monForm input[type=text],#monForm textarea,#masterStandaloneName,#homeScreenUrl{background:var(--ui-surface);color:var(--ui-ink);border-color:var(--ui-control)}
+#monForm fieldset,#shanhuaForm fieldset{background:var(--ui-surface);border-color:var(--ui-line)}
+#monForm legend,#shanhuaForm legend,#monStatus{color:var(--ui-accent-ink)}
+#monForm input[type=text],#monForm textarea,#shanhuaForm input[type=text],#shanhuaForm textarea,#masterStandaloneName,#homeScreenUrl{background:var(--ui-surface);color:var(--ui-ink);border-color:var(--ui-control)}
 #masterExport input,#masterExport select{background:var(--ui-surface);color:var(--ui-ink);border-color:var(--ui-control);border-style:solid;border-radius:6px}
 #homeScreenHelp{background:var(--ui-surface);color:var(--ui-ink);border-color:var(--ui-control)}
 #appendMaster,#uploadPhotosToDrive,#installHomeScreen{background:var(--ui-accent);color:var(--ui-accent-ink);border-color:var(--ui-control)}
@@ -126,8 +126,8 @@ input[readonly],#photoDrivePath,#monitoringDrivePath{background:var(--ui-soft);c
 input::placeholder,textarea::placeholder{color:var(--ui-muted);opacity:1}
 /* Moderate (5/10) restraint: clearer grouping and action hierarchy, same layout. */
 header{box-shadow:inset 0 -1px 0 var(--ui-line)}
-article,#monForm fieldset{box-shadow:0 2px 8px rgba(42,58,42,.04)}
-#monForm legend{background:#f0f4eb;border-radius:4px}
+article,#monForm fieldset,#shanhuaForm fieldset{box-shadow:0 2px 8px rgba(42,58,42,.04)}
+#monForm legend,#shanhuaForm legend{background:#f0f4eb;border-radius:4px}
 #fillMonTemplate,#connectDrive,#checkMaster{background:#edf3e7;border-color:#7c9474}
 #appendMaster,#uploadPhotosToDrive,#installHomeScreen{background:#47664c;color:#fff;border-color:#47664c}
 @media (hover:hover){#appendMaster:hover:enabled,#uploadPhotosToDrive:hover:enabled,#installHomeScreen:hover:enabled{background:#38553d}}

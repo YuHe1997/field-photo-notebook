@@ -136,16 +136,16 @@ button:not(.camera-overlay *):disabled {
 }
 
 /* 主要按鈕：深綠實心 */
-#start, #compose, #save, #appendMaster, #appendToEditor, #downloadWord, #uploadPhotosToDrive,
+#start, #compose, #save, #appendMaster, #shanhuaDownload, #appendToEditor, #downloadWord, #uploadPhotosToDrive,
 #installHomeScreen, #finishMasterSetup, #prepareWord, #folderSelectCurrent, #exportMonDocx {
   background: var(--brand);
   border-color: var(--brand);
   color: #fff;
   font-weight: 700;
 }
-#start, #compose, #save, #appendMaster, #appendToEditor, #downloadWord, #uploadPhotosToDrive { width: 100%; min-height: 54px; font-size: 17px; }
+#start, #compose, #save, #appendMaster, #shanhuaDownload, #appendToEditor, #downloadWord, #uploadPhotosToDrive { width: 100%; min-height: 54px; font-size: 17px; }
 @media (hover: hover) {
-  #start:hover:enabled, #compose:hover:enabled, #save:hover:enabled, #appendMaster:hover:enabled,
+  #start:hover:enabled, #compose:hover:enabled, #save:hover:enabled, #appendMaster:hover:enabled, #shanhuaDownload:hover:enabled,
   #appendToEditor:hover:enabled, #downloadWord:hover:enabled, #uploadPhotosToDrive:hover:enabled,
   #installHomeScreen:hover:enabled, #finishMasterSetup:hover:enabled, #prepareWord:hover:enabled,
   #folderSelectCurrent:hover:enabled, #exportMonDocx:hover:enabled { background: var(--brand-press); border-color: var(--brand-press); }
@@ -224,7 +224,6 @@ details { min-width: 0; }
 .today-card > label { display: block; margin: 0; color: #eef6ee; }
 #project { display: block; width: 100%; min-width: 0; margin-top: 4px; }
 .today-card #projectName { color: #e1ebdc; font-size: 12px; line-height: 1.5; margin: 8px 0 12px; overflow-wrap: anywhere; }
-#projectPhotoTools:not([hidden]) { display: grid; gap: 12px; margin-top: 20px; }
 /* 今日卡片：深綠，全頁視覺重心 */
 .today-card {
   margin-top: 14px;
@@ -575,7 +574,7 @@ article {
   font-weight: 750;
   letter-spacing: 0;
 }
-.step-card, #unifiedExport > section {
+.step-card, #unifiedExport > section, #shanhuaMonitoring > #photoDriveExport {
   padding: 16px;
   margin: 12px 0 18px;
   border: 1px solid var(--line);
@@ -583,16 +582,16 @@ article {
   background: var(--surface);
   box-shadow: var(--shadow-1);
 }
-.step-card h3, #unifiedExport > section h3 { margin-top: 0; }
+.step-card h3, #unifiedExport > section h3, #shanhuaMonitoring > #photoDriveExport h3 { margin-top: 0; }
 .monitoring-template { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
 .monitoring-template > button { width: 100%; margin: 0; }
 .monitoring-template > button:nth-child(n+3) { grid-column: 1 / -1; }
 #masterSelectionStatus, #fillDisabledReason { margin: 8px 0; }
 
-#monForm fieldset { min-width: 0; margin: 14px 0 20px; padding: 18px 16px 8px; border: 1px solid var(--line); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-1); }
-#monForm legend { padding: 4px 12px; font-size: 13px; font-weight: 700; letter-spacing: .06em; color: var(--brand); background: var(--brand-soft); border-radius: 999px; }
-#monForm label { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
-#monForm input[type=text], #monForm textarea { font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface); }
+#monForm fieldset, #shanhuaForm fieldset { min-width: 0; margin: 14px 0 20px; padding: 18px 16px 8px; border: 1px solid var(--line); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-1); }
+#monForm legend, #shanhuaForm legend { padding: 4px 12px; font-size: 13px; font-weight: 700; letter-spacing: .06em; color: var(--brand); background: var(--brand-soft); border-radius: 999px; }
+#monForm label, #shanhuaForm label { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
+#monForm input[type=text], #monForm textarea, #shanhuaForm input[type=text], #shanhuaForm textarea { font-size: 16px; font-weight: 400; color: var(--ink); background: var(--surface); }
 .mon-helper-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 8px; }
 .mon-helper-buttons button { font-size: 15px; min-height: 44px; padding: 8px 12px; }
 
@@ -623,13 +622,13 @@ body.keyboard-open header nav { display: none; }
 
 #unifiedExport { margin: 0; padding: 0; border: 0; }
 #unifiedExport > #driveExport { margin-top: -8px; }
-#masterExport > button, #photoDriveExport > #uploadPhotosToDrive { margin-top: 4px; }
+#masterExport > button, #shanhuaOutput > button, #photoDriveExport > #uploadPhotosToDrive { margin-top: 4px; }
 #photoDriveExport > button:first-of-type { margin-bottom: 4px; }
 .daily-folder-option { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-size: 15.5px; line-height: 1.5; }
 #photoDrivePath, #monitoringDrivePath { text-overflow: ellipsis; }
-#monitoringOtherExport { margin-top: 24px; padding: 0 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-l); }
-#monitoringOtherExport summary { font-weight: 700; padding: 14px 0; }
-#monitoringOtherExport .actions { gap: 8px; }
+#monitoringOtherExport, #shanhuaOtherExport { margin-top: 24px; padding: 0 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-l); }
+#monitoringOtherExport summary, #shanhuaOtherExport summary { font-weight: 700; padding: 14px 0; }
+#monitoringOtherExport .actions, #shanhuaOtherExport .actions { gap: 8px; }
 #masterBuild { font-size: 12px; color: var(--ink-muted); }
 
 /* 一般資訊提示 */
@@ -735,8 +734,8 @@ body.keyboard-open header nav { display: none; }
   header, main, footer { padding-left: 14px; padding-right: 14px; }
   #status { width: calc(100% - 28px); }
   #groupList > article { padding: 14px 12px 12px 18px; }
-  .step-card, #unifiedExport > section { padding: 14px; }
-  #monForm fieldset { padding: 16px 12px 6px; }
+  .step-card, #unifiedExport > section, #shanhuaMonitoring > #photoDriveExport { padding: 14px; }
+  #monForm fieldset, #shanhuaForm fieldset { padding: 16px 12px 6px; }
   .monitoring-template button { padding: 8px; }
   .coordinate-album-header { flex-wrap: wrap; }
   .today-card { padding: 12px; }
@@ -785,18 +784,16 @@ body.keyboard-open header nav { display: none; }
 .photos-top-tools { flex-wrap: wrap; }
 .photos-top-tools > #repairPhotos { flex-basis: 100%; }
 
-/* Shanhua's independent daily form; do not restyle Nanke controls. */
-#shanhuaMonitoring { max-width: 760px; margin-inline: auto; overflow-wrap: anywhere; }
+/* Shanhua-only controls; fieldsets, labels and actions share the Nanke system. */
 #shanhuaMonitoring [hidden] { display: none !important; }
-#shanhuaMonitoring .step-card { min-width: 0; }
-#shanhuaMonitoring .step-card h3 { display: flex; align-items: center; gap: 10px; }
-#shanhuaMonitoring .step-no { margin-right: 0; }
-#shanhuaMonitoring fieldset { min-width: 0; margin: 14px 0 20px; padding: 18px 12px 8px; border: 1px solid var(--line); border-radius: var(--radius-l); background: var(--surface); box-shadow: var(--shadow-1); }
-#shanhuaMonitoring legend { max-width: 100%; padding: 4px 12px; font-size: 13px; font-weight: 700; letter-spacing: .06em; color: var(--brand); background: var(--brand-soft); border-radius: 999px; }
-#shanhuaMonitoring fieldset fieldset { padding: 8px 0; margin: 8px 0; border: 0; border-radius: 0; box-shadow: none; }
-#shanhuaMonitoring fieldset fieldset legend { background: transparent; padding-inline: 0; }
-#shanhuaMonitoring label { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0 0 14px; font-size: 15px; font-weight: 600; color: var(--ink-2); }
-#shanhuaMonitoring input:not([type=checkbox]):not([type=radio]), #shanhuaMonitoring textarea { width: 100%; min-width: 0; max-width: 100%; font-size: 16px; font-weight: 400; }
+#shanhuaForm { min-width: 0; overflow-wrap: anywhere; }
+#shanhuaForm fieldset fieldset { padding: 8px 0; margin: 8px 0; border: 0; border-radius: 0; box-shadow: none; }
+#shanhuaForm fieldset fieldset legend { background: transparent; padding-inline: 0; }
+#shanhuaForm legend { max-width: 100%; }
+#shanhuaForm input:not([type=checkbox]):not([type=radio]), #shanhuaForm textarea { width: 100%; min-width: 0; max-width: 100%; }
+#shanhuaBasics summary, #shanhuaPrevFields { overflow-wrap: anywhere; }
+#shanhuaPrevFields { white-space: pre-wrap; }
+#shanhuaOutput input { width: 100%; min-width: 0; }
 #shanhuaMonitoring label.shanhua-check { flex-direction: row; align-items: center; gap: 12px; min-height: 48px; margin-bottom: 4px; cursor: pointer; }
 #shanhuaMonitoring input[type=checkbox], #shanhuaMonitoring input[type=radio] { width: 24px; height: 24px; min-height: 24px; margin: 0; flex-shrink: 0; accent-color: var(--brand); }
 #shanhuaMonitoring #shanhua-landform-text { flex: 1; width: 0; }
@@ -808,7 +805,5 @@ body.keyboard-open header nav { display: none; }
 #shanhuaMonitoring .shanhua-image button { margin: 0 6px 6px 0; }
 #shanhuaMonitoring .shanhua-file-input { position: absolute; width: 1px !important; height: 1px; min-height: 0; padding: 0; border: 0; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
 #shanhuaMonitoring #shanhuaStatus { white-space: pre-wrap; }
-#shanhuaMonitoring #shanhuaDownload { width: 100%; min-height: 54px; font-size: 17px; font-weight: 700; background: var(--brand); border-color: var(--brand); color: #fff; }
-#shanhuaMonitoring #shanhuaDownload:hover:enabled { background: var(--brand-press); border-color: var(--brand-press); }
 #shanhuaMonitoring #shanhuaCloud { margin-top: 12px; }
 #shanhuaMonitoring #shanhuaCloud button { margin: 0 4px 8px 0; }

@@ -46,6 +46,19 @@ export function validateShanhuaForm(form){
  if(form.carried!==undefined&&(!Array.isArray(form.carried)||!form.carried.every(key=>SHANHUA_CARRY_FIELDS.includes(key)||key==='report')))fail();
  return form;
 }
+export function previousShanhuaForm(day,drafts){
+ rocDate(day);
+ let previous=null;
+ for(const [date,value] of Object.entries(drafts||{})){
+  try{
+   rocDate(date);
+   if(date>=day||(previous&&date<=previous.day))continue;
+   const form=validateShanhuaForm(structuredClone(value));
+   if(form.day===date)previous={day:date,form};
+  }catch{ /* Skip invalid drafts without modifying them. */ }
+ }
+ return previous;
+}
 export function previousWorkContent(day,drafts){
  rocDate(day);
  let previous=null;
