@@ -818,6 +818,11 @@ body.keyboard-open header nav { display: none; }
 .nuke1-image img { display: block; max-width: 100%; max-height: 200px; object-fit: contain; margin-block: 12px; }
 .nuke1-image button { margin: 0 6px 6px 0; }
 #nuke1Form .nuke1-file-input { position: absolute; width: 1px; height: 1px; min-height: 0; padding: 0; border: 0; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
-#nuke1Status { white-space: pre-wrap; }
+#nuke1Status, #nuke1ExportStatus { white-space: pre-wrap; }
+#nuke1AddCoordinates { margin-bottom: 20px; }
+#nuke1ProjectName { resize: none; background: var(--paper-2); }
+#nuke1GroupChoices label { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; overflow-wrap: anywhere; }
+#nuke1GroupChoices select { width: 100%; min-width: 0; }
+#nuke1Cancel { margin-left: 8px; }
 #shanhuaMonitoring #shanhuaCloud { margin-top: 12px; }
 #shanhuaMonitoring #shanhuaCloud button { margin: 0 4px 8px 0; }
