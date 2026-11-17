@@ -1,7 +1,7 @@
 import * as db from './db.js';
 import {NUKE1_ID,NUKE1_PROJECT_NAME,NUKE1_REMARK,NUKE1_FIELDS,NUKE1_LABELS,emptyNuke1Form,validateNuke1Form,previousNuke1Value,nuke1Date,appendCoordinates} from './nuke1-form.js';
 import {getNuke1File,saveNuke1File,removeNuke1File} from './nuke1-store.js';
-import {nuke1Docx,nuke1PlacementKey,nuke1Placements,splitNuke1Groups} from './nuke1-docx.js';
+import {nuke1Docx,nuke1PlacementKey,nuke1Placements,splitNuke1Groups,nuke1SlotOfGroup} from './nuke1-docx.js';
 import {emptyShanhuaForm,fillShanhuaFixedDefaults,validateShanhuaForm,rocDate,SHANHUA_PROJECT_NAME,SHANHUA_CARRY_FIELDS,previousWorkContent,previousShanhuaForm} from './shanhua-form.js';
 import {shanhuaDocx} from './shanhua-docx.js';
 import {getShanhuaFile,saveShanhuaFile,removeShanhuaFile} from './shanhua-store.js';
@@ -52,7 +52,7 @@ const say=s=>{
     if($('cameraOverlayStatus')){$('cameraOverlayStatus').textContent=s;$('cameraOverlayStatus').classList.add('is-notice');}
   }
 };
-let photos=[],assets=[],groups=[],selected=new Set(),multi=false,edit=null,editBaseline=null,urls={gallery:[],groups:[],order:[],reference:[]},stream=null,watch=null,gps=null,heading=null,deviceTilt=null,sensorState='尚未啟用',active='camera',starting=false,busy=false,rotating=false,cameraSession=0,zoomState=null,focusState=null,lastFocusedElement=null,directionStatus='尚未啟用',gpsStatus='尚未啟用',activeSessionQueue=Promise.resolve(),constraintApplying=false,commitPromise=null,activeStartupSession=0,sessionReady=false;
+let photos=[],assets=[],groups=[],selected=new Set(),multi=false,edit=null,editBaseline=null,urls={gallery:[],groups:[],order:[],reference:[],nuke1:[]},stream=null,watch=null,gps=null,heading=null,deviceTilt=null,sensorState='尚未啟用',active='camera',starting=false,busy=false,rotating=false,cameraSession=0,zoomState=null,focusState=null,lastFocusedElement=null,directionStatus='尚未啟用',gpsStatus='尚未啟用',activeSessionQueue=Promise.resolve(),constraintApplying=false,commitPromise=null,activeStartupSession=0,sessionReady=false;
 const text=(tag,s)=>{const e=document.createElement(tag);e.textContent=s;return e;};
 async function run(fn){try{await fn();}catch(e){say('操作／儲存失敗：'+e.message+'。資料未宣稱成功，請重試或先備份。');}}
 const dayKey=()=>daysKey(currentProject);
@@ -108,7 +108,7 @@ function photoInfo(p){
   }
   return box;
 }
-function editorValue(){return edit?JSON.stringify({photoIds:edit.photoIds,engineering:$('engineering').value}):null;}
+function editorValue(){return edit?JSON.stringify({photoIds:edit.photoIds,engineering:$('engineering').value,nuke1Slot:isNuke1()?$('nuke1Slot')?.value:undefined}):null;}
 function editorDirty(){return !!edit&&editorValue()!==editBaseline;}
 function canDiscardEditor(){return !editorDirty()||confirm('記事尚未儲存，確定放棄這次編輯？');}
 window.addEventListener('beforeunload',e=>{if(editorDirty()||pending.length||busy||rotating||monDraftManager.hasAnyUnsaved()){e.preventDefault();e.returnValue='';}});
@@ -752,9 +752,9 @@ $('multi').onclick=()=>{multi=!multi;if(!multi)selected=new Set([...selected].sl
 let groupOrdering=false,editingExisting=false;
 $('toggleGroupOrder').onclick=()=>{groupOrdering=!groupOrdering;$('toggleGroupOrder').setAttribute('aria-pressed',String(groupOrdering));render();};
 $('returnToEditor').onclick=()=>tab('editor');
-function openEditor(g,ids=[...selected]){if(!canDiscardEditor())return;editingExisting=!!g;edit=structuredClone(g||{id:crypto.randomUUID(),title:'',notes:'',engineering:'',photoIds:ids,createdAt:Date.now(),workDay:activeDay,projectId:currentProject});$('title').value=groupTitle(edit.photoIds);$('engineering').value=edit.engineering;editBaseline=editorValue();tab('editor');}
+function openEditor(g,ids=[...selected]){if(!canDiscardEditor())return;editingExisting=!!g;edit=structuredClone(g||{id:crypto.randomUUID(),title:'',notes:'',engineering:'',photoIds:ids,createdAt:Date.now(),workDay:activeDay,projectId:currentProject});$('title').value=groupTitle(edit.photoIds);$('engineering').value=edit.engineering;$('nuke1SlotField').hidden=!isNuke1();if(isNuke1())$('nuke1Slot').value=nuke1SlotFor(edit);editBaseline=editorValue();tab('editor');}
 function renderOrder(focus){$('title').value=groupTitle(edit.photoIds);releaseImages('order');$('order').replaceChildren();$('photoInfo').replaceChildren();const previews=text('div','');previews.className='editor-previews';previews.dataset.count=edit.photoIds.length;edit.photoIds.forEach((id,i)=>{const figure=text('figure','');figure.append(photoImage(id,'order'),text('figcaption',compactPhotoLines(photos.find(p=>p.id===id),i)[0]));previews.append(figure);});$('order').append(previews);edit.photoIds.forEach((id,i)=>{const p=photos.find(p=>p.id===id),row=text('article',''),head=text('div',''),controls=text('div','');head.className='photo-row-head';controls.className='photo-row-controls';head.append(text('h3',compactPhotoLines(p,i)[0]));for(const [label,delta] of [['上移',-1],['下移',1]]){const b=text('button',delta<0?'↑':'↓');b.title=label;b.setAttribute('aria-label',`${i+1}. ${photoLabel(p)} ${label}`);b.dataset.photoId=id;b.dataset.action=label;b.disabled=i+delta<0||i+delta>=edit.photoIds.length;b.onclick=()=>{edit.photoIds=move(edit.photoIds,i,delta);renderOrder({id,action:label});say(`${photoLabel(p)} 已${label}至第 ${edit.photoIds.indexOf(id)+1} 張`);};controls.append(b);}const cr=text('button','裁切');cr.title='裁切照片（保持原比例）';cr.setAttribute('aria-label',`${i+1}. ${photoLabel(p)} 裁切`);cr.dataset.photoId=id;cr.dataset.action='裁切';cr.onclick=()=>run(()=>cropPhoto(id));controls.append(cr);const r=text('button','×');r.title='從此組移除';r.setAttribute('aria-label',`${i+1}. ${photoLabel(p)} 從此組移除`);r.dataset.photoId=id;r.dataset.action='從此組移除';r.onclick=()=>{edit.photoIds.splice(i,1);renderOrder({id:edit.photoIds[Math.min(i,edit.photoIds.length-1)],action:'從此組移除'});say(`${photoLabel(p)} 已從此組移除，原始照片仍保留`);};controls.append(r);head.append(controls);row.append(head,photoInfo(p));$('photoInfo').append(row);});if(focus){const controls=[...$('photoInfo').querySelectorAll('button')].filter(b=>b.dataset.photoId===focus.id&&!b.disabled);(controls.find(b=>b.dataset.action===focus.action)||controls[0]||$('addSelected')).focus();}}
-$('compose').onclick=()=>{if(!selected.size){say('請先選照片');return;}openEditor();};$('appendToEditor').onclick=()=>{if(!edit)return;const day=edit.workDay??workDayOf(photos.find(p=>p.id===edit.photoIds[0])??{});if([...selected].some(id=>workDayOf(photos.find(p=>p.id===id))!==day)){say('請勿將不同工作日的照片加入同一記事。');return;}edit.photoIds=[...new Set([...edit.photoIds,...selected])];tab('editor');};$('addSelected').onclick=()=>{if(edit){tab('photos');say('請選取照片，再按「加入目前記事並返回」。');}};$('cancel').onclick=()=>{if(!canDiscardEditor())return;const returnTab=groups.some(g=>g.id===edit?.id)?'groups':'photos';$('editor').hidden=true;edit=null;editBaseline=null;releaseImages('order');render();tab(returnTab);};$('save').onclick=()=>run(async()=>{if(!edit)return;const title=groupTitle(edit.photoIds),g={...edit,title,notes:edit.notes??'',engineering:$('engineering').value,updatedAt:Date.now()};if(edit.title&&edit.title!==title&&!edit.legacyTitle)g.legacyTitle=edit.title;validateGroup(g,new Set(photos.map(p=>p.id)));await db.saveGroup(g,{existing:editingExisting});$('editor').hidden=true;edit=null;editBaseline=null;releaseImages('order');selected.clear();await load();say('紀錄集已儲存');tab('groups');});
+$('compose').onclick=()=>{if(!selected.size){say('請先選照片');return;}openEditor();};$('appendToEditor').onclick=()=>{if(!edit)return;const day=edit.workDay??workDayOf(photos.find(p=>p.id===edit.photoIds[0])??{});if([...selected].some(id=>workDayOf(photos.find(p=>p.id===id))!==day)){say('請勿將不同工作日的照片加入同一記事。');return;}edit.photoIds=[...new Set([...edit.photoIds,...selected])];tab('editor');};$('addSelected').onclick=()=>{if(edit){tab('photos');say('請選取照片，再按「加入目前記事並返回」。');}};$('cancel').onclick=()=>{if(!canDiscardEditor())return;const returnTab=groups.some(g=>g.id===edit?.id)?'groups':'photos';$('editor').hidden=true;edit=null;editBaseline=null;releaseImages('order');render();tab(returnTab);};$('save').onclick=()=>run(async()=>{if(!edit)return;const title=groupTitle(edit.photoIds),g={...edit,title,notes:edit.notes??'',engineering:$('engineering').value,updatedAt:Date.now()};if(isNuke1())g.nuke1Slot=$('nuke1Slot').value;if(edit.title&&edit.title!==title&&!edit.legacyTitle)g.legacyTitle=edit.title;validateGroup(g,new Set(photos.map(p=>p.id)));await db.saveGroup(g,{existing:editingExisting});$('editor').hidden=true;edit=null;editBaseline=null;releaseImages('order');selected.clear();await load();say('紀錄集已儲存');tab('groups');});
 $('backup').onclick=()=>run(async()=>{say('正在建立本機備份（交易快照；不含未提交資料）…');const snapshot=await db.snapshot();const entries=[],records=[];for(const p of snapshot.photos){const blob=snapshot.assets.find(a=>a.id===p.id)?.original;if(!blob)throw Error('原始影像缺失');const path=`originals/${p.id}.bin`;entries.push([path,blob]);records.push({...backupRecord(p),path,size:blob.size,sha256:await digest(blob)});}for(const g of snapshot.groups)validateGroup(g,new Set(snapshot.photos.map(p=>p.id)));const manifest={schema:1,createdAt:Date.now(),snapshotStartedAt:snapshot.startedAt,snapshotCompletedAt:snapshot.completedAt,completeness:'單一唯讀交易中的已提交資料；不含未儲存表單／待存照片／快照之後提交資料',photos:records,groups:snapshot.groups.map(backupRecord),workDays:readDays(DEFAULT_PROJECT).days,activeWorkDay:readDays(DEFAULT_PROJECT).active??localDay(),numberCounters:db.numberCounters(),activeProject:currentProject,projectStates:Object.fromEntries(PROJECTS.map(p=>[p.id,{...readDays(p.id),numberCounters:db.numberCounters(p.id)}]))};entries.push(['area-reference.json',new Blob([JSON.stringify({schema:1,calculatedAt:Date.now(),meaning:'暫定區界及本次備份時計算的參考；還原照片後仍依 App 當前區界回算，不自動匯入或信任此區界',dataset:AREA_DATA,photos:snapshot.photos.map(p=>({photoId:p.id,reference:areaReference(p)}))},null,2)],{type:'application/json'})]);entries.push(['manifest.json',new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'})],['notes.txt',new Blob([snapshot.groups.map(g=>`${g.title}\n工作日：${g.workDay??'舊版請參照各照片 workDay'}\n工程描述：${g.engineering}\n${g.notes?'舊版備註（保留）：'+g.notes+'\n':''}${g.legacyTitle?'舊版名稱（保留）：'+g.legacyTitle+'\n':''}順序：${g.photoIds.join(', ')}\n`).join('\n')])],['README.txt',new Blob(['原始影像在 originals/；檔名與 MIME 在 manifest.json。GPS 是裝置位置；方向不是可靠鏡頭朝向。相機讀值以按鈕時間為基準，不是曝光資料。舊版 capturedAt / ageAtShutterMs 亦是按鈕時間／年齡。沒有 EXIF 嵌入或雲端同步。'])]);const archive=await tar(entries),url=URL.createObjectURL(archive),a=document.createElement('a');a.href=url;a.download=`field-notebook-${Date.now()}.tar`;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);say('已交給瀏覽器下載；請確認下載完成（無法驗證使用者是否取消）');});
 $('restore').onchange=()=>run(async()=>{const file=$('restore').files[0];if(!file)return;say('驗證備份中…');const entries=await untar(file),m=JSON.parse(await entries.get('manifest.json')?.text()),local=await db.snapshot();if(m.schema!==1||!Array.isArray(m.photos)||!Array.isArray(m.groups))throw Error('不支援的備份');Object.assign(m,restoreProjectRecords(m));if(m.projectStates!==undefined){if(!m.projectStates||typeof m.projectStates!=='object'||Array.isArray(m.projectStates))throw Error('專案狀態格式無效');for(const [id,s] of Object.entries(m.projectStates)){if(!PROJECTS.some(p=>p.id===id)||!s||!Array.isArray(s.days)||s.days.some(d=>!validDay(d))||(s.active!==null&&!validDay(s.active))||!s.numberCounters||typeof s.numberCounters!=='object'||Array.isArray(s.numberCounters)||Object.entries(s.numberCounters).some(([d,n])=>!validDay(d)||!Number.isSafeInteger(n)||n<1))throw Error('專案工作日／計數格式無效');}}if(m.workDays!==undefined&&(!Array.isArray(m.workDays)||m.workDays.some(d=>!validDay(d))))throw Error('工作日格式無效');if(m.activeWorkDay!==undefined&&!validDay(m.activeWorkDay))throw Error('目前工作日格式無效');if(m.numberCounters!==undefined&&(typeof m.numberCounters!=='object'||m.numberCounters===null||Array.isArray(m.numberCounters)||Object.entries(m.numberCounters).some(([d,n])=>!validDay(d)||!Number.isSafeInteger(n)||n<1)))throw Error('編號計數格式無效');const incomingNumbers=new Set();const ids=new Set(),gids=new Set(),staged=[];for(const p of m.photos){if(p.workDay!==undefined&&!validDay(p.workDay)||p.photoNumber!==undefined&&(!Number.isSafeInteger(p.photoNumber)||p.photoNumber<1)||p.displayRotation!==undefined&&![0,90,180,270].includes(p.displayRotation))throw Error('照片工作日／編號／旋轉格式無效');if(p.crop!==undefined&&!validCrop(p.crop))throw Error('照片裁切資料格式無效');if(p.workDay&&p.photoNumber){const numberKey=numberIdentity(p);if(incomingNumbers.has(numberKey)||local.photos.some(x=>numberIdentity(x)===numberKey))throw Error('工作日照片編號重複或與本機衝突');incomingNumbers.add(numberKey);}if(typeof p.id!=='string'||!/^[-a-zA-Z0-9]+$/.test(p.id)||ids.has(p.id)||local.photos.some(x=>x.id===p.id)||p.path!==`originals/${p.id}.bin`||typeof p.originalName!=='string'||!['camera','gallery'].includes(p.source)||typeof p.mime!=='string'||!p.mime.startsWith('image/'))throw Error('照片格式／ID 重複或與本機衝突');ids.add(p.id);const b=entries.get(p.path);if(!b||b.size!==p.size||await digest(b)!==p.sha256)throw Error('影像大小或雜湊不符');const {path,size,sha256,...photo}=p;staged.push({photo,blob:new Blob([b],{type:p.mime})});}for(const g of m.groups){if(typeof g.id!=='string'||typeof g.title!=='string'||typeof g.notes!=='string'||typeof g.engineering!=='string'||gids.has(g.id)||local.groups.some(x=>x.id===g.id))throw Error('紀錄集格式／ID 衝突');gids.add(g.id);validateGroup(g,ids);}if(!confirm(`已驗證 ${staged.length} 張照片、${m.groups.length} 組，匯入本機？`))return;await db.transaction(['photos','assets','groups'],tx=>{for(const x of staged){tx.objectStore('photos').add(x.photo);tx.objectStore('assets').add({id:x.photo.id,original:x.blob});}for(const g of m.groups)tx.objectStore('groups').add(g);});db.mergeCounters(m.numberCounters);const states=m.projectStates??{[DEFAULT_PROJECT]:{days:m.workDays??[],active:m.activeWorkDay??null,numberCounters:m.numberCounters??{}}};for(const [id,s] of Object.entries(states)){db.mergeCounters(s.numberCounters,id);const old=readDays(id);safeGetLocalStorage()?.setItem(daysKey(id),JSON.stringify({days:[...new Set([...old.days,...s.days])].sort(),active:s.active??old.active}));}dayState=readDays();activeDay=dayState.active;monDisplayedDay=null;await load();say('備份已完整還原（原圖與顯示旋轉分開保存）');$('restore').value='';});
 const SHANHUA_ID='shanhua-1350pscp',SHANHUA_REMEMBER_KEY=projectKey('field-shanhua-remembered',SHANHUA_ID);
@@ -963,6 +963,7 @@ function buildNuke1UI(){
  function group(title){const set=document.createElement('fieldset');set.append(text('legend',title));form.append(set);return set;}
  function readonly(parent,id,label,value=''){const wrap=text('label',label),input=document.createElement(id==='nuke1ProjectName'?'textarea':'input');if(input.tagName==='INPUT')input.type='text';else input.rows=4;input.id=id;input.readOnly=true;input.value=value;wrap.append(input);parent.append(wrap);}
  const basics=group('基本資料');readonly(basics,'nuke1Day','監看日期');readonly(basics,'nuke1ProjectName','1.工程名稱',NUKE1_PROJECT_NAME);
+ function slotBox(slot,title){const wrap=text('div',''),heading=text('h4',title),list=text('div',''),note=text('p','要修改請到紀錄集頁編輯');wrap.className='nuke1-slot';wrap.dataset.nuke1Slot=slot;heading.className='nuke1-slot-title';list.className='nuke1-slot-list';list.dataset.nuke1SlotList=slot;note.className='nuke1-slot-note';wrap.append(heading,list,note);return wrap;}
  const observations=group('現地觀察與作業狀況');
  for(const key of NUKE1_FIELDS){
   const parent=['contractor','location','site'].includes(key)?basics:observations,wrap=text('label',NUKE1_LABELS[key]),input=document.createElement('textarea');input.rows=key==='advice'?8:3;input.id='nuke1-'+key;input.dataset.nuke1Field=key;wrap.append(input);parent.append(wrap);
@@ -973,6 +974,8 @@ function buildNuke1UI(){
   const prev=document.createElement('details');prev.className='nuke1-prev';prev.dataset.nuke1Prev=key;const preview=text('div',''),apply=text('button','帶入');preview.className='nuke1-prev-value';apply.type='button';apply.dataset.nuke1Apply=key;
   prev.append(text('summary','沒有前筆紀錄'),preview,apply);parent.append(prev);
   apply.onclick=()=>runNuke1(async()=>{const found=previousNuke1Value(nuke1Day,readNuke1Drafts(),key);if(!found)return;if(input.value.trim()&&input.value!==found.value&&!confirm('此欄已有文字，要以 '+nuke1Date(found.day)+' 的前筆紀錄覆寫？'))return;input.value=found.value;nuke1Dirty=true;saveNuke1Draft();});
+  if(key==='strata')parent.append(slotBox('8','第 8 項的紀錄集'));
+  if(key==='otherEvents')parent.append(slotBox('14','14.相關圖示或照片'));
  }
  form.append(text('p','15.備註：'+NUKE1_REMARK));
  const signatures=group('簽名（上傳一次，之後沿用）');signatures.id='nuke1Signatures';
@@ -990,10 +993,10 @@ function buildNuke1UI(){
  const status=text('p','');status.id='nuke1Status';status.setAttribute('role','status');const reset=text('button','以新草稿覆寫');reset.id='nuke1ResetDraft';reset.type='button';reset.hidden=true;
  reset.onclick=()=>{if(!isNuke1()||!confirm('確定以新草稿覆寫此日無法讀取的草稿？原草稿將被取代。'))return;try{const storage=safeGetLocalStorage();if(!storage)throw Error('本機儲存空間無法使用');storage.setItem(monitoringDraftKey(nuke1Day,NUKE1_ID),JSON.stringify(emptyNuke1Form(nuke1Day)));nuke1Day=null;hydrateNuke1UI();}catch(error){status.textContent='未完成：'+error.message;}};
  today.append(status,reset);
- const output=card('03','輸出今日紀錄表');output.id='nuke1Output';const choices=text('div','');choices.id='nuke1GroupChoices';
+ const output=card('03','輸出今日紀錄表');output.id='nuke1Output';
  const download=text('button','下載 Word');download.id='nuke1Download';download.type='button';download.onclick=()=>runNuke1(downloadNuke1Doc);
  const cancel=text('button','取消製作');cancel.id='nuke1Cancel';cancel.type='button';cancel.hidden=true;cancel.onclick=()=>nuke1Controller?.abort();
- const progress=text('p','');progress.id='nuke1ExportStatus';progress.setAttribute('role','status');output.append(choices,download,cancel,progress);
+ const progress=text('p','');progress.id='nuke1ExportStatus';progress.setAttribute('role','status');const upload=text('button','依日期上傳母檔');upload.id='nuke1UploadMaster';upload.type='button';upload.disabled=true;const uploadNote=text('p','下一版提供');uploadNote.id='nuke1UploadNote';const uploadWrap=text('div','');uploadWrap.className='nuke1-upload-wrap';uploadWrap.append(upload,uploadNote);const actions=text('div','');actions.className='nuke1-output-actions';actions.append(download,uploadWrap);output.append(actions,cancel,progress);
  const other=document.createElement('details');other.id='nuke1OtherExport';other.append(text('summary','Word / TAR 進階備份'));const tools=text('div','');tools.className='actions';other.append(tools);box.append(other);return box;
 }
 function readNuke1Drafts(){
@@ -1021,25 +1024,38 @@ function hydrateNuke1UI(){
  }
  updateNuke1Previous();renderNuke1Export();
 }
-function readNuke1Placements(day,selectedGroups){
- const storage=safeGetLocalStorage();if(!storage)throw Error('本機儲存空間無法使用');
- let saved;try{saved=JSON.parse(storage.getItem(nuke1PlacementKey(day))||'{}');}catch{saved={};}
- return nuke1Placements(selectedGroups,saved);
+function nuke1LegacyPlacements(day){
+ // Release 54 kept a per-day choice in localStorage; read it only as a fallback for groups without nuke1Slot. Never deleted.
+ try{const storage=safeGetLocalStorage();if(!storage||!validDay(day))return {};const saved=JSON.parse(storage.getItem(nuke1PlacementKey(day))||'{}');return saved&&typeof saved==='object'&&!Array.isArray(saved)?saved:{};}catch{return {};}
+}
+const nuke1SlotFor=(g,photoList=photos)=>nuke1SlotOfGroup(g,photoList,nuke1LegacyPlacements);
+function readNuke1Placements(selectedGroups,photoList=photos){
+ return Object.fromEntries(selectedGroups.map(g=>[g.id,nuke1SlotFor(g,photoList)]));
+}
+function ensureNuke1SlotField(){
+ if($('nuke1SlotField'))return;
+ const label=text('label','放入核一表單'),select=document.createElement('select');label.id='nuke1SlotField';select.id='nuke1Slot';
+ for(const [value,title] of [['14','第 14 項（相關圖示或照片）'],['8','第 8 項（地層堆積狀況）']]){const option=text('option',title);option.value=value;select.append(option);}
+ label.append(select);label.hidden=true;$('engineering').closest('label').after(label);
+}
+function renderNuke1Slots(){
+ releaseImages('nuke1');
+ const included=groups.filter(g=>projectOf(g)===NUKE1_ID&&groupInDay(g)).sort(compareGroups),placements=readNuke1Placements(included);
+ for(const slot of ['8','14']){
+  const list=document.querySelector(`[data-nuke1-slot-list="${slot}"]`);if(!list)continue;list.replaceChildren();
+  const items=included.filter(g=>placements[g.id]===slot);
+  if(!items.length){list.append(text('p',`今天沒有指定到第 ${slot} 項的紀錄集`));continue;}
+  for(const g of items){
+   const item=text('article',''),note=text('p',g.engineering.trim()||'（無說明）'),pics=text('div','');item.className='nuke1-slot-group';item.dataset.groupId=g.id;note.className='nuke1-slot-text';pics.className='nuke1-slot-photos';
+   for(const id of g.photoIds)if(photos.some(p=>p.id===id))pics.append(photoImage(id,'nuke1'));
+   item.append(note,pics);list.append(item);
+  }
+ }
 }
 function renderNuke1Export(){
  if(nuke1Working)return;
- const box=$('nuke1GroupChoices'),included=groups.filter(g=>projectOf(g)===NUKE1_ID&&groupInDay(g)).sort(compareGroups);box.replaceChildren();
  $('nuke1Download').disabled=!nuke1Ready;
- if(!included.length){box.append(text('p','今天還沒有紀錄集；第 8、14 項只會有文字'));return;}
- try{
-  const choices=readNuke1Placements(nuke1Day,included);
-  for(const g of included){
-   const label=text('label',`${[...g.engineering].slice(0,40).join('')||'（無說明）'} · ${g.photoIds.length} 張`),select=document.createElement('select');select.dataset.nuke1Group=g.id;
-   for(const [value,title] of [['14','放入第 14 項（預設）'],['8','放入第 8 項'],['omit','不放入']]){const option=text('option',title);option.value=value;select.append(option);}select.value=choices[g.id];
-   select.onchange=()=>{try{const saved=readNuke1Placements(nuke1Day,included);saved[g.id]=select.value;safeGetLocalStorage().setItem(nuke1PlacementKey(nuke1Day),JSON.stringify(saved));choices[g.id]=select.value;$('nuke1ExportStatus').textContent='此日紀錄集選擇已儲存';}catch(error){select.value=choices[g.id];$('nuke1ExportStatus').textContent='選擇未儲存：'+error.message;}};
-   label.append(select);box.append(label);
-  }
- }catch(error){$('nuke1Download').disabled=true;$('nuke1ExportStatus').textContent='無法讀取選擇：'+error.message;}
+ renderNuke1Slots();
 }
 async function downloadNuke1Doc(){
  const day=nuke1Day,form=emptyNuke1Form(day);for(const key of NUKE1_FIELDS)form[key]=$('nuke1-'+key).value;
@@ -1047,7 +1063,7 @@ async function downloadNuke1Doc(){
  try{
   saveNuke1Draft();
   const raw=await db.snapshot(),snapshot={...raw,photos:raw.photos.filter(p=>projectOf(p)===NUKE1_ID),groups:raw.groups.filter(g=>projectOf(g)===NUKE1_ID)},byId=new Map(snapshot.photos.map(p=>[p.id,p]));
-  const included=snapshot.groups.filter(g=>g.workDay===day||g.photoIds.some(id=>byId.has(id)&&workDayOf(byId.get(id))===day)).sort(compareGroups),placements=readNuke1Placements(day,included),chosen=included.filter(g=>placements[g.id]!=='omit');
+  const included=snapshot.groups.filter(g=>g.workDay===day||g.photoIds.some(id=>byId.has(id)&&workDayOf(byId.get(id))===day)).sort(compareGroups),placements=readNuke1Placements(included,snapshot.photos),chosen=included;
   const prepared=chosen.length?await preparePhotoGroups(snapshot,chosen.map(g=>g.id),{signal:controller.signal,onProgress:(n,total)=>{$('nuke1ExportStatus').textContent=`正在本機整理照片 ${n}/${total}，不會上傳…`;}}):[];
   const [monitorSignature,leaderSignature]=await Promise.all(['monitor','leader'].map(kind=>getNuke1File('signature:'+kind)));
   const blob=await nuke1Docx(form,{...splitNuke1Groups(prepared,placements),monitorSignature,leaderSignature});
@@ -1063,14 +1079,14 @@ async function refreshNuke1Images(){
  ['monitor','leader'].forEach((kind,i)=>{const old=nuke1Urls.get(kind);if(old)URL.revokeObjectURL(old);nuke1Urls.delete(kind);const image=$('nuke1Preview-'+kind),value=images[i];image.hidden=$('nuke1Remove-'+kind).hidden=!value;$('nuke1Choose-'+kind).textContent=value?'更換':'選擇圖片';image.removeAttribute('src');if(value){const url=URL.createObjectURL(value.blob);nuke1Urls.set(kind,url);image.src=url;}});
 }
 async function runNuke1(action){
- if(!isNuke1()||!nuke1Ready||nuke1Working)return;nuke1Working=true;for(const input of [...nuke1Controls(),...$('nuke1Output').querySelectorAll('select,#nuke1Download')])input.disabled=true;
+ if(!isNuke1()||!nuke1Ready||nuke1Working)return;nuke1Working=true;for(const input of [...nuke1Controls(),...$('nuke1Output').querySelectorAll('#nuke1Download')])input.disabled=true;
  try{await action();}catch(error){$('nuke1Status').textContent='未完成：'+error.message;}finally{nuke1Working=false;for(const input of nuke1Controls())input.disabled=!nuke1Ready;updateNuke1Previous();renderNuke1Export();}
 }
 window.addEventListener('beforeunload',e=>{if(nuke1Dirty||nuke1Working){e.preventDefault();e.returnValue='';}});
 let projectUIReady=false,sharedToolSlots=[],nankeAlsoDoc=true;
 function renderProjectUI(){
  if(!projectUIReady){
-  projectUIReady=true;nankeAlsoDoc=$('photoAlsoDoc').checked;
+  projectUIReady=true;nankeAlsoDoc=$('photoAlsoDoc').checked;ensureNuke1SlotField();
   for(const p of PROJECTS){const option=text('option',p.shortName);option.value=p.id;option.title=p.name;$('project').append(option);}
   const wrapper=document.createElement('div');wrapper.id='nankeMonitoring';wrapper.append(...$('monitoring').childNodes);$('monitoring').append(wrapper,buildShanhuaUI(),buildNuke1UI());
   const shared=[...['exportWord','backup','persist','storage','photoDriveExport'].map($),$('restore').parentElement];
@@ -1080,7 +1096,7 @@ function renderProjectUI(){
  }
  $('project').value=currentProject;$('projectName').textContent=projectInfo(currentProject).name;
  $('areaDatasetNote').hidden=!projectInfo(currentProject).areaReference;
- $('nankeMonitoring').hidden=!isNanke();$('shanhuaMonitoring').hidden=!isShanhua();$('nuke1Monitoring').hidden=!isNuke1();
+ $('nankeMonitoring').hidden=!isNanke();$('shanhuaMonitoring').hidden=!isShanhua();$('nuke1Monitoring').hidden=!isNuke1();$('nuke1SlotField').hidden=!isNuke1()||!edit;
  if(isShanhua())hydrateShanhuaUI();
  if(isNuke1())hydrateNuke1UI();
  $('scopePhrasePanel').hidden=!isNanke();

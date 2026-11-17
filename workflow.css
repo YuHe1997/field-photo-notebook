@@ -821,8 +821,18 @@ body.keyboard-open header nav { display: none; }
 #nuke1Status, #nuke1ExportStatus { white-space: pre-wrap; }
 #nuke1AddCoordinates { margin-bottom: 20px; }
 #nuke1ProjectName { resize: none; background: var(--paper-2); }
-#nuke1GroupChoices label { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; overflow-wrap: anywhere; }
-#nuke1GroupChoices select { width: 100%; min-width: 0; }
 #nuke1Cancel { margin-left: 8px; }
 #shanhuaMonitoring #shanhuaCloud { margin-top: 12px; }
 #shanhuaMonitoring #shanhuaCloud button { margin: 0 4px 8px 0; }
+/* 核一：表單 02 的第 8／14 項紀錄集預覽（唯讀） */
+.nuke1-slot { margin: -6px 0 20px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface-2); }
+.nuke1-slot-title { margin: 0 0 8px; font-size: 15px; }
+.nuke1-slot-group { margin-bottom: 14px; }
+.nuke1-slot-text { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.nuke1-slot-photos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.nuke1-slot-photos img { display: block; width: 100%; height: auto; border-radius: var(--radius-s); }
+.nuke1-slot-note { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); }
+.nuke1-output-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+.nuke1-upload-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+#nuke1UploadNote { margin: 0; font-size: 13px; color: var(--ink-2); }
+#nuke1SlotField select { width: 100%; min-width: 0; }

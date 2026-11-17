@@ -1,4 +1,5 @@
 import {zipStore,xmlText} from './docx.js';
+import {validDay,workDayOf} from './core.js';
 import {validateNuke1Form,nuke1Date,NUKE1_PROJECT_NAME,NUKE1_REMARK,NUKE1_LABELS} from './nuke1-form.js';
 const XML='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -10,6 +11,24 @@ function paragraph(value){return `<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r>$
 export const nuke1PlacementKey=day=>{nuke1Date(day);return 'field-nuke1-photo-placement-v1-'+day;};
 export function nuke1Placements(groups,saved={}){
  return Object.fromEntries(groups.map(g=>[g.id,['8','14','omit'].includes(saved?.[g.id])?saved[g.id]:'14']));
+}
+// Which Form item a record set goes to: its own `nuke1Slot`; else the Release 54 per-day choice ('8' or the old 'strata' → 8); else 14.
+export const NUKE1_SLOTS=Object.freeze(['8','14']);
+export function nuke1SlotOf(group,legacy={}){
+ if(NUKE1_SLOTS.includes(group?.nuke1Slot))return group.nuke1Slot;
+ const old=legacy?.[group?.id];
+ return old==='8'||old==='strata'?'8':'14';
+}
+// The day a record set belongs to: its own workDay, else the day of its first photo (same rule as db.saveGroup).
+export function nuke1GroupDay(group,photos=[]){
+ if(validDay(group?.workDay))return group.workDay;
+ const first=photos.find(p=>p.id===group?.photoIds?.[0]);
+ return first?workDayOf(first):null;
+}
+// The single rule for editor, 02 preview and Word: the Release 54 fallback is looked up by the group's own day, never the selected day.
+export function nuke1SlotOfGroup(group,photos,legacyOf){
+ const day=nuke1GroupDay(group,photos);
+ return nuke1SlotOf(group,day?legacyOf(day):{});
 }
 export function splitNuke1Groups(groups,placements){
  const choices=nuke1Placements(groups,placements);

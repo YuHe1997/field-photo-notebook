@@ -1,5 +1,5 @@
 export function readingAt(reading,time,limit){return reading && reading.readingAt<=time ? {...reading,ageAtShutterMs:time-reading.readingAt,freshness:time-reading.readingAt<=limit?'新鮮':'過期'}:null;}
-export function validateGroup(g,photos){if(!g.id||!g.title.trim()||!Array.isArray(g.photoIds)||!g.photoIds.length||new Set(g.photoIds).size!==g.photoIds.length||g.photoIds.some(id=>!photos.has(id)))throw Error('紀錄集資料或照片參照無效');return g;}
+export function validateGroup(g,photos){if(g.nuke1Slot!==undefined&&g.nuke1Slot!=='8'&&g.nuke1Slot!=='14')throw Error('核一表單項目無效');if(!g.id||!g.title.trim()||!Array.isArray(g.photoIds)||!g.photoIds.length||new Set(g.photoIds).size!==g.photoIds.length||g.photoIds.some(id=>!photos.has(id)))throw Error('紀錄集資料或照片參照無效');return g;}
 export function move(ids,index,delta){const out=[...ids],dest=index+delta;if(dest>=0&&dest<out.length)[out[index],out[dest]]=[out[dest],out[index]];return out;}
 export const digest=async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await b.arrayBuffer()))).map(n=>n.toString(16).padStart(2,'0')).join('');
 // POSIX ustar, uncompressed: interoperable archive without external services/libraries.
