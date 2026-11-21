@@ -42,6 +42,6 @@ export async function importFiles(files,{workDay,isHeif,sniffImageType:sniff=sni
   }
   let message=`已加入 ${saved} 張，已儲存於本機（未上傳）`;
   if(converted)message+=`；${converted} 張 HEIC 已轉為 JPEG`;
-  if(failed.length)message+=`；已匯入 ${saved} 張；${failed.length} 張無法解碼，未加入：${failed.join('、')}`;
+  if(failed.length)message+=`；${failed.length} 張無法解碼，未加入：${failed.join('、')}`;
   return {saved,total,converted,failed,message};
 }
